@@ -28,10 +28,11 @@ class VNNCompetition(Competition):
         if isinstance(submission, Tool):
             if not submission.repository:
                 raise ValidationError("A VNN-COMP tool must provide a git repository.")
-        else:  # Benchmark
-            if not submission.instances.exists():
-                raise ValidationError("A VNN-COMP benchmark must define at least one instance "
-                                      "(onnx + vnnlib + timeout).")
+        else:  # Benchmark: generated from a git repo and stored in the benchmarks
+            # repo (instances live there, not in the DB), so just require the source.
+            if not (submission.extra or {}).get("repository"):
+                raise ValidationError("A VNN-COMP benchmark must provide a git repository "
+                                      "with a generator (generate_properties.py).")
 
     # (2) Step-graph builder ----------------------------------------------
     def build_steps(self, task) -> list:
