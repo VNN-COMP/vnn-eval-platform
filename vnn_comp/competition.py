@@ -61,8 +61,13 @@ class VNNCompetition(Competition):
             ]
             if opts.get("pause"):
                 steps.append(add(kinds.PAUSE))
-            # Per-benchmark runs (the tool×benchmark matrix for this tool's category).
-            benchmarks = Benchmark.objects.filter(category=tool.category, published=True).order_by("name")
+            # Per-benchmark runs. If the submission selected specific benchmarks
+            # (from the form), run exactly those; otherwise the whole category.
+            selected = opts.get("benchmarks") or []
+            if selected:
+                benchmarks = Benchmark.objects.filter(id__in=selected, published=True).order_by("name")
+            else:
+                benchmarks = Benchmark.objects.filter(category=tool.category, published=True).order_by("name")
             for b in benchmarks:
                 steps.append(add(kinds.RUN_BENCHMARK, benchmark_id=str(b.id),
                                  run_networks=run_networks, version=version,
