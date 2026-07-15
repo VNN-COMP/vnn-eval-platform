@@ -1,7 +1,7 @@
-# Local dev stack for the VNN-COMP variant: Postgres + the backend.
-# The backend installs the core engine (sibling checkout) and this plugin editable,
-# migrates, seeds settings, and serves. For local_docker execution the backend also
-# needs the host Docker socket (uncomment below) once node scripts are vendored.
+# Local dev stack for the VNN-COMP variant: Postgres + backend + the core frontend
+# shell + a Cloudflare quick-tunnel for remote viewing.
+#   docker compose up            -> frontend proxied at http://localhost:5173
+#   docker compose logs cloudflared | grep trycloudflare   -> the public URL
 services:
   db:
     image: postgres:16
@@ -39,11 +39,32 @@ services:
              python deploy/manage.py migrate &&
              python deploy/manage.py init_settings &&
              python deploy/manage.py runserver 0.0.0.0:8000"
-    ports:
-      - "8001:8000"
     depends_on:
       db:
         condition: service_healthy
 
+  frontend:
+    image: node:20-slim
+    working_dir: /app
+    volumes:
+      - ../comp-eval-platform/frontend:/app
+      - frontend_node_modules:/app/node_modules
+    environment:
+      VITE_API_URL: http://backend:8000   # Vite proxies /api and /update here
+      VITE_USE_POLLING: "1"               # bind-mount fs events don't cross to the container
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+
+  # Cloudflare quick tunnel — free, no auth token. Prints an https://*.trycloudflare.com URL.
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    command: tunnel --no-autoupdate --url http://frontend:5173
+    depends_on:
+      - frontend
+
 volumes:
   pgdata:
+  frontend_node_modules:
