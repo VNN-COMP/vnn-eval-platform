@@ -11,7 +11,7 @@ from django.core.exceptions import ValidationError
 
 from comp_eval_platform.competitions import Competition
 from comp_eval_platform.core.models.execution import SHUTDOWN_KIND
-from comp_eval_platform.results import Presentation, ResultRecord, Scoreboard
+from comp_eval_platform.results import Branding, Presentation, ResultRecord, Scoreboard
 
 from . import kinds
 
@@ -88,6 +88,9 @@ class VNNCompetition(Competition):
     def script_root(self) -> str:
         return os.path.join(os.path.dirname(__file__), "scripts")
 
+    def assets_dir(self) -> str:
+        return os.path.join(os.path.dirname(__file__), "assets")
+
     # (4) Result parsing → normalized records -----------------------------
     def parse_results(self, run, artifacts_dir: str) -> list:
         """Read the node's ``results.csv`` (instance,result,time) into records."""
@@ -137,4 +140,9 @@ class VNNCompetition(Competition):
                 {"name": "export_results", "type": "bool"},
             ],
             score_columns=["tool", "solved", "time"],
+            branding=Branding(
+                primary_color="#1e3a8a",  # deep blue, matching the VNN-COMP logo
+                hero_image="https://miro.medium.com/max/1400/1*zlt_wRZCGofSbmSqduds9w.png",
+                favicon="/api/competition/assets/favicon.png",
+            ),
         )
