@@ -11,7 +11,7 @@ from django.core.exceptions import ValidationError
 
 from comp_eval_platform.competitions import Competition
 from comp_eval_platform.core.models.execution import SHUTDOWN_KIND
-from comp_eval_platform.results import Branding, Presentation, ResultRecord, Scoreboard
+from comp_eval_platform.results import Branding, Landing, Presentation, ResultRecord, Scoreboard
 
 from . import kinds
 
@@ -144,5 +144,19 @@ class VNNCompetition(Competition):
                 primary_color="#1e3a8a",  # deep blue, matching the VNN-COMP logo
                 hero_image="https://miro.medium.com/max/1400/1*zlt_wRZCGofSbmSqduds9w.png",
                 favicon="/api/competition/assets/favicon.png",
+            ),
+            landing=Landing(
+                tagline="The premier competition for neural network verification. Test your "
+                        "toolkit against cutting-edge benchmarks and compete with researchers worldwide.",
+                links=[
+                    {"label": "Main Website", "url": "https://vnn-comp.github.io/"},
+                    {"label": "GitHub", "url": "https://github.com/VNN-COMP"},
+                ],
+                contacts=["kaulen@aim.rwth-aachen.de", "tobias.ladner@tum.de"],
+                related={
+                    "text": "Interested in verifying neural network control systems? Check out ARCH-COMP!",
+                    "label": "Visit ARCH-COMP",
+                    "url": "https://arch.repeatability.cps.cit.tum.de",
+                },
             ),
         )
