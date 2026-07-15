@@ -1,0 +1,7 @@
+# Normalize line endings; this code runs on Linux workers.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.pem binary
+# Shell scripts must stay LF and executable (they SSH into / run on nodes).
+*.sh text eol=lf

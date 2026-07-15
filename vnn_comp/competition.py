@@ -1,0 +1,135 @@
+"""The VNN-COMP variant: the six Competition seams.
+
+Structured rung of the decomposition ladder: install-once → per-benchmark run
+(each run loops its instances on the node) → export → shutdown. A single implicit
+``default`` category. Competition-specific submission options live in Tool.extra.
+"""
+import csv
+import os
+
+from django.core.exceptions import ValidationError
+
+from comp_eval_platform.competitions import Competition
+from comp_eval_platform.core.models.execution import SHUTDOWN_KIND
+from comp_eval_platform.results import Presentation, ResultRecord, Scoreboard
+
+from . import kinds
+
+
+class VNNCompetition(Competition):
+    name = "vnn"
+    display_name = "VNN-COMP"
+
+    # (1) Submission spec + validation ------------------------------------
+    def validate_submission(self, submission) -> None:
+        from comp_eval_platform.core.models import Tool
+
+        if isinstance(submission, Tool):
+            if not submission.repository:
+                raise ValidationError("A VNN-COMP tool must provide a git repository.")
+        else:  # Benchmark
+            if not submission.instances.exists():
+                raise ValidationError("A VNN-COMP benchmark must define at least one instance "
+                                      "(onnx + vnnlib + timeout).")
+
+    # (2) Step-graph builder ----------------------------------------------
+    def build_steps(self, task) -> list:
+        from comp_eval_platform.core.models import Benchmark, TaskStep
+
+        order = 0
+
+        def add(kind, *, run_as_root=True, **payload):
+            nonlocal order
+            step = TaskStep.objects.create(
+                task=task, kind=kind, order=order, run_as_root=run_as_root, payload=payload,
+            )
+            order += 1
+            return step
+
+        steps = []
+        if task.tool is not None:
+            tool = task.tool
+            opts = tool.extra or {}
+            version = opts.get("vnnlib_version", "1.0")
+            run_networks = opts.get("run_networks", "all")
+            export = bool(opts.get("export_results", False))
+
+            steps += [
+                add(kinds.CREATE),
+                add("assign"),
+                add(kinds.INSTALL, run_as_root=opts.get("install_as_root", True)),
+            ]
+            if opts.get("pause"):
+                steps.append(add(kinds.PAUSE))
+            # Per-benchmark runs (the tool×benchmark matrix for this tool's category).
+            benchmarks = Benchmark.objects.filter(category=tool.category, published=True).order_by("name")
+            for b in benchmarks:
+                steps.append(add(kinds.RUN_BENCHMARK, benchmark_id=str(b.id),
+                                 run_networks=run_networks, version=version,
+                                 run_as_root=opts.get("run_as_root", True)))
+                if export:
+                    steps.append(add(kinds.EXPORT, benchmark_id=str(b.id), version=version))
+            steps.append(add(SHUTDOWN_KIND))
+        else:  # benchmark submission: validate/initialize it on a node, optionally export
+            steps += [
+                add(kinds.CREATE),
+                add("assign"),
+                add(kinds.RUN_BENCHMARK, benchmark_id=str(task.benchmark.id)),
+                add(SHUTDOWN_KIND),
+            ]
+        return steps
+
+    # (3) Node scripts + I/O contract -------------------------------------
+    def script_root(self) -> str:
+        return os.path.join(os.path.dirname(__file__), "scripts")
+
+    # (4) Result parsing → normalized records -----------------------------
+    def parse_results(self, run, artifacts_dir: str) -> list:
+        """Read the node's ``results.csv`` (instance,result,time) into records."""
+        path = os.path.join(artifacts_dir, "results.csv")
+        records = []
+        if not os.path.exists(path):
+            return records
+        with open(path, newline="") as fh:
+            for row in csv.reader(fh):
+                if len(row) < 3:
+                    continue
+                instance, result, time = row[0], row[1], row[2]
+                try:
+                    t = float(time)
+                except ValueError:
+                    t = None
+                records.append(ResultRecord(instance=instance.strip(), result=result.strip(), time=t))
+        return records
+
+    # (5) Scoring ---------------------------------------------------------
+    def score(self, track) -> Scoreboard:
+        from collections import defaultdict
+
+        from comp_eval_platform.core.models import Result
+
+        benchmark_ids = track.benchmarks.values_list("id", flat=True)
+        rows = defaultdict(lambda: {"solved": 0, "time": 0.0})
+        for r in Result.objects.filter(benchmark_id__in=benchmark_ids).select_related("tool"):
+            key = r.tool.name
+            rows[key]["tool"] = key
+            if r.result and r.result.lower() not in ("unknown", "error", "timeout"):
+                rows[key]["solved"] += 1
+            rows[key]["time"] += r.time or 0.0
+        return Scoreboard(
+            columns=["tool", "solved", "time"],
+            rows=sorted(rows.values(), key=lambda x: (-x["solved"], x["time"])),
+        )
+
+    # (6) Presentation / export -------------------------------------------
+    def presentation(self) -> Presentation:
+        return Presentation(
+            result_columns=["instance", "result", "time"],
+            submission_fields=[
+                {"name": "vnnlib_version", "type": "select", "options": ["1.0", "2.0"]},
+                {"name": "run_networks", "type": "select", "options": ["all", "some"]},
+                {"name": "install_as_root", "type": "bool"},
+                {"name": "export_results", "type": "bool"},
+            ],
+            score_columns=["tool", "solved", "time"],
+        )

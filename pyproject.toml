@@ -1,0 +1,26 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "vnn-comp"
+version = "0.1.0"
+description = "VNN-COMP variant plugin for the comp-eval-platform engine."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "Tobias Ladner" }]
+
+dependencies = [
+    "comp-eval-platform>=0.1.0",
+]
+
+[project.optional-dependencies]
+aws = ["comp-eval-platform[aws]"]
+dev = ["comp-eval-platform[dev]"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["vnn_comp"]
+
+# During local dev, install the core from the sibling checkout:
+#   pip install -e ../comp-eval-platform -e .
