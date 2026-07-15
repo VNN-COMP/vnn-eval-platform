@@ -1,0 +1,49 @@
+# Local dev stack for the VNN-COMP variant: Postgres + the backend.
+# The backend installs the core engine (sibling checkout) and this plugin editable,
+# migrates, seeds settings, and serves. For local_docker execution the backend also
+# needs the host Docker socket (uncomment below) once node scripts are vendored.
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: vnn
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  backend:
+    image: python:3.11-slim
+    working_dir: /app
+    volumes:
+      - ../comp-eval-platform:/core
+      - .:/app
+      # - /var/run/docker.sock:/var/run/docker.sock   # for EXECUTION_BACKEND=local_docker
+    environment:
+      DJANGO_SETTINGS_MODULE: deploy.settings
+      DATABASE_URL: postgres://postgres:postgres@db:5432/vnn
+      ACTIVE_COMPETITION: vnn
+      EXECUTION_BACKEND: local_docker
+      MAX_PARALLEL_NODES: "1"
+      SCHEDULER_AUTOSTART: "False"
+      SECRET_KEY: dev-insecure
+      DEBUG: "True"
+      ROOT_URL: http://backend:8000
+    command: >
+      sh -c "pip install -q -e /core -e . &&
+             python deploy/manage.py migrate &&
+             python deploy/manage.py init_settings &&
+             python deploy/manage.py runserver 0.0.0.0:8000"
+    ports:
+      - "8001:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:

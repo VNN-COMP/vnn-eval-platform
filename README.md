@@ -14,13 +14,30 @@ The entire variant is:
 
 No core changes: adding a competition is a new package like this one.
 
-## Local dev
+## Run the stack (Postgres + backend)
+
+```bash
+docker compose up          # backend on http://localhost:8001
+```
+
+The backend installs the core engine (`../comp-eval-platform`) and this plugin,
+migrates, seeds settings, and serves. Admin at `/admin/`, API under `/api/`.
+Configure via env (see `.env.example`).
+
+For `EXECUTION_BACKEND=local_docker`, uncomment the docker-socket mount in
+`docker-compose.yml` and vendor the node scripts into `vnn_comp/scripts/` first.
+
+## Without Docker
 
 ```bash
 pip install -e ../comp-eval-platform -e .
-python deploy/manage.py makemigrations && python deploy/manage.py migrate
+python deploy/manage.py migrate && python deploy/manage.py init_settings
 DJANGO_SETTINGS_MODULE=deploy.settings python deploy/manage.py runserver
 ```
 
-Configure via env: `DATABASE_URL`, `EXECUTION_BACKEND` (aws|local_docker),
-`MAX_PARALLEL_NODES`, `SCHEDULER_AUTOSTART`, `ROOT_URL`.
+## Test
+
+```bash
+docker run --rm -v "<core>:/core" -v "$PWD:/vnn" -w /vnn python:3.11-slim \
+  sh -c "pip install -q -e '/core[dev]' -e /vnn && pytest"
+```
