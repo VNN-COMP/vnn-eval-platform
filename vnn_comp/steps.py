@@ -134,6 +134,78 @@ class RunBenchmarkHandler(StepHandler):
         return None
 
 
+def _benchmark_of(step):
+    from comp_eval_platform.core.models import Benchmark
+
+    return Benchmark.objects.filter(id=step.payload.get("benchmark_id")).first()
+
+
+def _generation_params(task, step):
+    """Params shared by the generate/export node scripts: source repo, layout, seed."""
+    from django.conf import settings
+
+    b = _benchmark_of(step)
+    opts = (b.extra if b else {}) or {}
+    return b, {
+        "benchmark_ip": _node_ip(task),
+        "task_id": str(task.id),
+        "benchmark_id": str(b.id) if b else "",
+        "benchmark_name": b.name if b else "",
+        "repository": opts.get("repository", ""),
+        "hash": opts.get("hash", ""),
+        "script_dir": opts.get("script_dir", ".") or ".",
+        "onnx_dir": opts.get("onnx_dir", "onnx"),
+        "vnnlib_dir": opts.get("vnnlib_dir", "vnnlib"),
+        "csv_file": opts.get("csv_file", "instances.csv"),
+        "vnnlib_version": step.payload.get("version", "1.0"),
+        "seed": str(settings.BENCHMARK_SEED),
+    }
+
+
+@register_step_handler
+class GenerateHandler(StepHandler):
+    """Generate a benchmark on the node: clone the source repo @ hash, run its
+    generator (generate_properties.py <seed>) and normalize into instances.csv +
+    onnx/vnnlib. The node curls back on completion."""
+
+    kind = kinds.GENERATE
+
+    def execute(self):
+        if _node_ip(self.task) is None:
+            self.task.step_failed(check_status=False)
+            return
+        _b, params = _generation_params(self.task, self.step)
+        _ping("benchmark", "generate_benchmark.sh", params)
+
+
+@register_step_handler
+class BenchmarkExportHandler(StepHandler):
+    """Push the generated files + a source README to the benchmarks git repo, under
+    a ``<category>/`` folder when the variant uses categories (VNN: flat)."""
+
+    kind = kinds.BENCHMARK_EXPORT
+
+    def execute(self):
+        from django.conf import settings
+
+        from comp_eval_platform.competitions import get_competition
+
+        if _node_ip(self.task) is None:
+            self.task.step_succeeded(check_status=False)  # export is best-effort
+            return
+        b, params = _generation_params(self.task, self.step)
+        params.update({
+            "category": b.category.name if b else "",
+            "uses_categories": str(get_competition().uses_categories).lower(),
+            "benchmarks_repo": settings.BENCHMARKS_PUSH_REPO,
+            "deploy_key": settings.BENCHMARKS_DEPLOY_KEY,
+        })
+        _ping("benchmark", "export_benchmark.sh", params)
+
+    def is_instance_loss_valid_end(self) -> bool:
+        return True  # a lost node during export shouldn't fail the whole task
+
+
 @register_step_handler
 class ExportHandler(StepHandler):
     kind = kinds.EXPORT

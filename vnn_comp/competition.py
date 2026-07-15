@@ -76,11 +76,16 @@ class VNNCompetition(Competition):
                 if export:
                     steps.append(add(kinds.EXPORT, benchmark_id=str(b.id), version=version))
             steps.append(add(SHUTDOWN_KIND))
-        else:  # benchmark submission: validate/initialize it on a node, optionally export
+        else:  # benchmark submission: generate instances from the repo, then export them
+            bench = task.benchmark
+            opts = bench.extra or {}
             steps += [
                 add(kinds.CREATE),
                 add("assign"),
-                add(kinds.RUN_BENCHMARK, benchmark_id=str(task.benchmark.id)),
+                add(kinds.GENERATE, benchmark_id=str(bench.id),
+                    version=opts.get("vnnlib_version", "1.0")),
+                add(kinds.BENCHMARK_EXPORT, benchmark_id=str(bench.id),
+                    version=opts.get("vnnlib_version", "1.0")),
                 add(SHUTDOWN_KIND),
             ]
         return steps
