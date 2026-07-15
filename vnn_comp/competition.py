@@ -19,6 +19,7 @@ from . import kinds
 class VNNCompetition(Competition):
     name = "vnn"
     display_name = "VNN-COMP"
+    uses_categories = False  # a single implicit 'default' category
 
     # (1) Submission spec + validation ------------------------------------
     def validate_submission(self, submission) -> None:
@@ -138,6 +139,9 @@ class VNNCompetition(Competition):
                 {"name": "run_networks", "type": "select", "options": ["all", "some"]},
                 {"name": "install_as_root", "type": "bool"},
                 {"name": "export_results", "type": "bool"},
+            ],
+            benchmark_fields=[
+                {"name": "vnnlib_version", "type": "select", "options": ["1.0", "2.0"]},
             ],
             score_columns=["tool", "solved", "time"],
             branding=Branding(
