@@ -10,7 +10,7 @@ import os
 from django.core.exceptions import ValidationError
 
 from comp_eval_platform.competitions import Competition
-from comp_eval_platform.core.models.execution import SHUTDOWN_KIND
+from comp_eval_platform.core.models.execution import PAUSE_KIND, SHUTDOWN_KIND
 from comp_eval_platform.results import Branding, Landing, Presentation, ResultRecord, Scoreboard
 
 from . import kinds
@@ -62,7 +62,7 @@ class VNNCompetition(Competition):
                 add(kinds.INSTALL, run_as_root=opts.get("install_as_root", True)),
             ]
             if opts.get("pause"):
-                steps.append(add(kinds.PAUSE))
+                steps.append(add(PAUSE_KIND))
             # Per-benchmark runs. If the submission selected specific benchmarks
             # (from the form), run exactly those; otherwise the whole category.
             selected = opts.get("benchmarks") or []

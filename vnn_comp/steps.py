@@ -14,11 +14,6 @@ from comp_eval_platform.core.steps import StepHandler, register_step_handler
 from . import kinds
 
 
-def _node_ip(task):
-    node = task.node
-    return node.ip if node is not None else None
-
-
 @register_step_handler
 class CreateHandler(StepHandler):
     """Prepare the submission record; nothing to run on a node yet."""
@@ -37,7 +32,7 @@ class InstallHandler(StepHandler):
     kind = kinds.INSTALL
 
     def execute(self):
-        ip = _node_ip(self.task)
+        ip = self.node_ip
         if ip is None:
             self.task.step_failed(check_status=False)
             return
@@ -53,19 +48,6 @@ class InstallHandler(StepHandler):
 
 
 @register_step_handler
-class PauseHandler(StepHandler):
-    """Hold until an operator resumes (manual step). Stays active indefinitely."""
-
-    kind = kinds.PAUSE
-
-    def status_check(self):
-        return  # do not advance automatically
-
-    def can_be_aborted(self) -> bool:
-        return True
-
-
-@register_step_handler
 class RunBenchmarkHandler(StepHandler):
     """Run one benchmark (the node loops its instances via run_all/run_single)."""
 
@@ -78,13 +60,12 @@ class RunBenchmarkHandler(StepHandler):
         return Benchmark.objects.filter(id=bid).first()
 
     def execute(self):
-        ip = _node_ip(self.task)
-        if ip is None:
+        if self.node_ip is None:
             self.task.step_failed(check_status=False)
             return
         b = self._benchmark()
         _ping("toolkit", "run_benchmark.sh", {
-            "benchmark_ip": ip,
+            "benchmark_ip": self.node_ip,
             "task_id": str(self.task.id),
             "benchmark_name": b.name if b else "",
             "run_networks": self.step.payload.get("run_networks", "all"),
@@ -148,7 +129,7 @@ def _generation_params(task, step):
     b = _benchmark_of(step)
     opts = (b.extra if b else {}) or {}
     return b, {
-        "benchmark_ip": _node_ip(task),
+        "benchmark_ip": task.node.ip if task.node else None,
         "task_id": str(task.id),
         "benchmark_id": str(b.id) if b else "",
         "benchmark_name": b.name if b else "",
@@ -173,7 +154,7 @@ class GenerateHandler(StepHandler):
     node_log_path = "logs/generate.log"  # generate_benchmark.sh tees the run here
 
     def execute(self):
-        if _node_ip(self.task) is None:
+        if self.node_ip is None:
             self.task.step_failed(check_status=False)
             return
         _b, params = _generation_params(self.task, self.step)
@@ -192,7 +173,7 @@ class BenchmarkExportHandler(StepHandler):
 
         from comp_eval_platform.competitions import get_competition
 
-        if _node_ip(self.task) is None:
+        if self.node_ip is None:
             self.task.step_succeeded(check_status=False)  # export is best-effort
             return
         import os
@@ -218,12 +199,11 @@ class ExportHandler(StepHandler):
     kind = kinds.EXPORT
 
     def execute(self):
-        ip = _node_ip(self.task)
-        if ip is None:
+        if self.node_ip is None:
             self.task.step_succeeded(check_status=False)  # export is best-effort
             return
         _ping("toolkit", "export_results.sh", {
-            "benchmark_ip": ip,
+            "benchmark_ip": self.node_ip,
             "task_id": str(self.task.id),
             "benchmark_id": self.step.payload.get("benchmark_id", ""),
         })

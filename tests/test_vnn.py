@@ -33,18 +33,18 @@ def test_validate_tool_requires_repository():
     comp.validate_submission(ok)  # no raise
 
 
-def test_validate_benchmark_requires_instances():
+def test_validate_benchmark_requires_repository():
     from django.core.exceptions import ValidationError
 
     from comp_eval_platform.competitions import get_competition
-    from comp_eval_platform.core.models import Benchmark, Category, Instance
+    from comp_eval_platform.core.models import Benchmark, Category
 
     comp = get_competition()
     cat = Category.objects.create(name="default")
     b = Benchmark.objects.create(owner=_user(), category=cat, name="b")
     with pytest.raises(ValidationError):
-        comp.validate_submission(b)
-    Instance.objects.create(benchmark=b, name="i1")
+        comp.validate_submission(b)  # no source repo
+    b.extra = {"repository": "https://example.com/repo.git"}
     comp.validate_submission(b)  # no raise
 
 
@@ -86,7 +86,7 @@ def test_build_steps_with_pause_and_export():
     get_competition().build_steps(task)
 
     assert list(task.step_set.order_by("order").values_list("kind", flat=True)) == [
-        kinds.CREATE, "assign", kinds.INSTALL, kinds.PAUSE,
+        kinds.CREATE, "assign", kinds.INSTALL, "pause",
         kinds.RUN_BENCHMARK, kinds.EXPORT,
         "shutdown",
     ]
