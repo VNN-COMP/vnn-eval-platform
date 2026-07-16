@@ -16,12 +16,16 @@
 # benchmarks_repo deploy_key local_repo. NODE_SSH_KEY/ROOT_URL from the env.
 set -eu
 
+# Capture the run so notify can POST it (host-side; fire-and-forget, no console reader).
+LOGFILE="$(mktemp)"
+exec >"$LOGFILE" 2>&1
+
 ssh_key="${NODE_SSH_KEY:-$HOME/.ssh/vnncomp.pem}"
 name="${benchmark_name}"
 
-notify() {  # success|failure — report completion to the backend
+notify() {  # success|failure — report completion to the backend, POSTing the run log
     url="${ROOT_URL}/update/${task_id}/$1"
-    curl -fsS --retry 20 --retry-connrefused "$url" 2>/dev/null && return 0
+    curl -fsS --retry 20 --retry-connrefused --data-binary @"$LOGFILE" "$url" 2>/dev/null && return 0
     wget -q -O /dev/null "$url" 2>/dev/null && return 0
     python3 -c "import urllib.request;urllib.request.urlopen('$url')" 2>/dev/null
 }
@@ -29,7 +33,7 @@ fail() { echo "[ERROR] $1"; notify failure; exit 1; }
 
 work="$(mktemp -d)"
 ephemeral=""
-cleanup() { rm -rf "$work"; [ -n "$ephemeral" ] && rm -rf "$ephemeral"; }
+cleanup() { rm -rf "$work"; rm -f "$LOGFILE"; [ -n "$ephemeral" ] && rm -rf "$ephemeral"; }
 trap cleanup EXIT
 
 # Repo folder for this benchmark.

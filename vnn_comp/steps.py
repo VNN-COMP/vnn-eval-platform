@@ -93,7 +93,8 @@ class RunBenchmarkHandler(StepHandler):
         })
 
     def while_active(self):
-        """Enforce the per-benchmark wall-clock cap (safety net for hangs)."""
+        """Stream the node log, then enforce the per-benchmark wall-clock cap."""
+        super().while_active()
         from comp_eval_platform.core.models import RuntimeSettings
 
         s = RuntimeSettings.get()
@@ -169,6 +170,7 @@ class GenerateHandler(StepHandler):
     onnx/vnnlib. The node curls back on completion."""
 
     kind = kinds.GENERATE
+    node_log_path = "logs/generate.log"  # generate_benchmark.sh tees the run here
 
     def execute(self):
         if _node_ip(self.task) is None:

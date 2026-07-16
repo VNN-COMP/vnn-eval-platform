@@ -18,26 +18,43 @@ services:
       retries: 20
 
   backend:
-    image: python:3.11-slim
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
     working_dir: /app
     volumes:
       - ../comp-eval-platform:/core
       - .:/app
       - vnndata:/data   # local benchmark/results git repos (DATA_DIR)
-      # - /var/run/docker.sock:/var/run/docker.sock   # for EXECUTION_BACKEND=local_docker
+      - /var/run/docker.sock:/var/run/docker.sock   # local_docker: run node containers
     environment:
       DJANGO_SETTINGS_MODULE: deploy.settings
       DATABASE_URL: postgres://postgres:postgres@db:5432/vnn
       ACTIVE_COMPETITION: vnn
       EXECUTION_BACKEND: local_docker
       MAX_PARALLEL_NODES: "1"
-      SCHEDULER_AUTOSTART: "False"
+      SCHEDULER_AUTOSTART: "True"
+      AUTOMATIC_UPDATE_INTERVAL: "15"   # dev: poll fast so nodes attach quickly
       SECRET_KEY: dev-insecure
       DEBUG: "True"
       ROOT_URL: http://backend:8000
       DATA_DIR: /data
+      BENCHMARK_SEED: "42"   # dev: generators need a seed arg; prod derives it per season
+      # local_docker execution wiring: where the node scripts live, the SSH key the
+      # backend uses to reach nodes, and the network node containers join (must be
+      # this compose project's network so backend<->node SSH and node->backend
+      # callbacks resolve).
+      SCRIPT_ROOT: /app/vnn_comp
+      NODE_SSH_KEY: /root/.ssh/vnncomp.pem
+      VNNCOMP_DOCKER_SSH_KEY: /root/.ssh/vnncomp.pem
+      VNNCOMP_DOCKER_NETWORK: vnn-comp-new_default
+      VNNCOMP_DEFAULT_DOCKER_IMAGE: ubuntu:22.04
     command: >
-      sh -c "pip install -q -e /core -e . &&
+      sh -c "mkdir -p /root/.ssh &&
+             [ -f /root/.ssh/vnncomp.pem ] || ssh-keygen -q -t ed25519 -N '' -f /root/.ssh/vnncomp.pem &&
+             chmod 400 /root/.ssh/vnncomp.pem &&
+             find /app/vnn_comp/scripts -name '*.sh' -exec chmod +x {} + &&
+             pip install -q -e /core -e . &&
              python deploy/manage.py migrate &&
              python deploy/manage.py init_settings &&
              python deploy/manage.py runserver 0.0.0.0:8000"
