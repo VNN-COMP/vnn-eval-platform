@@ -193,12 +193,17 @@ class BenchmarkExportHandler(StepHandler):
         if _node_ip(self.task) is None:
             self.task.step_succeeded(check_status=False)  # export is best-effort
             return
+        import os
+
         b, params = _generation_params(self.task, self.step)
+        remote = settings.BENCHMARKS_PUSH_REPO
         params.update({
             "category": b.category.name if b else "",
             "uses_categories": str(get_competition().uses_categories).lower(),
-            "benchmarks_repo": settings.BENCHMARKS_PUSH_REPO,
-            "deploy_key": settings.BENCHMARKS_DEPLOY_KEY,
+            # Empty benchmarks_repo -> commit to the local repo instead.
+            "benchmarks_repo": remote,
+            "deploy_key": settings.BENCHMARKS_DEPLOY_KEY if remote else "",
+            "local_repo": os.path.join(settings.LOCAL_REPOS_DIR, "benchmarks"),
         })
         _ping("benchmark", "export_benchmark.sh", params)
 

@@ -1,68 +1,75 @@
 #!/bin/sh
-# Push a generated benchmark's files + a source README to the benchmarks git repo.
+# Store a generated benchmark's files + a source README in a git repo.
 #
-# Layout: variants with categories (ARCH) file under benchmarks/<category>/<name>/;
-# VNN (no categories) keeps the flat benchmarks/<name>/<vnnlib_version>/ layout,
-# adding a 2.0/ tree when the generation step produced one. Large binaries
-# (*.onnx, *.vnnlib) are tracked with Git LFS. The remote script curls
-# ${ROOT_URL}/update/${task_id}/success|failure.
+# Runs on the backend host: scp's the generated tree back from the node, then
+# commits it. Default (empty benchmarks_repo) -> a persistent local repo under
+# local_repo, no external setup. A configured remote is cloned/pushed instead;
+# its deploy key stays on the host, never copied to a node. The step is reported
+# done via ${ROOT_URL}/update/${task_id}/success|failure.
+#
+# Layout: categories (ARCH) -> benchmarks/<category>/<name>/; VNN (flat) ->
+# benchmarks/<name>/<vnnlib_version>/, plus a 2.0/ tree when generation made one.
+# *.onnx and *.vnnlib use Git LFS.
 #
 # Params (env): benchmark_ip task_id benchmark_name category uses_categories
 # repository hash seed script_dir onnx_dir vnnlib_dir csv_file vnnlib_version
-# benchmarks_repo deploy_key. ROOT_URL/NODE_SSH_KEY from the backend environment.
+# benchmarks_repo deploy_key local_repo. NODE_SSH_KEY/ROOT_URL from the env.
 set -eu
 
 ssh_key="${NODE_SSH_KEY:-$HOME/.ssh/vnncomp.pem}"
 name="${benchmark_name}"
-remote_script_path="/home/ubuntu/export_benchmark_${task_id}.sh"
-remote_log_path="logs/export.log"
 
-# The benchmark's base folder in the repo (category-nested when the variant uses categories).
+notify() {  # success|failure — report completion to the backend
+    url="${ROOT_URL}/update/${task_id}/$1"
+    curl -fsS --retry 20 --retry-connrefused "$url" 2>/dev/null && return 0
+    wget -q -O /dev/null "$url" 2>/dev/null && return 0
+    python3 -c "import urllib.request;urllib.request.urlopen('$url')" 2>/dev/null
+}
+fail() { echo "[ERROR] $1"; notify failure; exit 1; }
+
+work="$(mktemp -d)"
+ephemeral=""
+cleanup() { rm -rf "$work"; [ -n "$ephemeral" ] && rm -rf "$ephemeral"; }
+trap cleanup EXIT
+
+# Repo folder for this benchmark.
 if [ "${uses_categories}" = "true" ]; then
     base="benchmarks/${category}/${name}"
 else
     base="benchmarks/${name}"
 fi
 
-scp -o StrictHostKeyChecking=accept-new -i "${ssh_key}" \
-    "${deploy_key}" "ubuntu@${benchmark_ip}:/home/ubuntu/.ssh/id_deploy"
+# Working repo: an ephemeral clone of the remote, or the persistent local repo.
+if [ -n "${benchmarks_repo}" ]; then
+    export GIT_SSH_COMMAND="ssh -i ${deploy_key} -o StrictHostKeyChecking=accept-new"
+    ephemeral="$(mktemp -d)"
+    repo_dir="$ephemeral"
+    git clone "${benchmarks_repo}" "$repo_dir" || fail "clone failed"
+else
+    repo_dir="${local_repo}"
+    mkdir -p "$repo_dir"
+    [ -d "$repo_dir/.git" ] || git init -q "$repo_dir"
+fi
+cd "$repo_dir"
+git config user.name 'VNN-Comp Bot'
+git config user.email 'noreply@vnn-comp'
+git lfs install --local >/dev/null 2>&1 || true
+git lfs track '*.onnx' '*.vnnlib' >/dev/null 2>&1 || true
 
-ssh -o StrictHostKeyChecking=accept-new -i "${ssh_key}" "ubuntu@${benchmark_ip}" \
-    "cat > ${remote_script_path} <<'REMOTE_SCRIPT'
-#!/bin/bash
-cd /home/ubuntu || exit 1
-mkdir -p logs
-exec > >(tee ${remote_log_path}) 2>&1
-set -x
-echo '[INFO] benchmark export started'
-
-chmod 600 /home/ubuntu/.ssh/id_deploy
-export GIT_SSH_COMMAND='ssh -i /home/ubuntu/.ssh/id_deploy -o StrictHostKeyChecking=accept-new'
-git config --global user.name 'VNN-Comp Bot'
-git config --global user.email 'noreply@vnn-comp'
-command -v git-lfs >/dev/null 2>&1 || { sudo apt-get update && sudo apt-get install -y git-lfs; }
-
-src=/home/ubuntu/benchmark/${script_dir}
-
-# Push with rebase-and-retry: concurrent exports touch distinct paths, so a
-# non-fast-forward just needs a clean rebase.
-push_with_retry() {
-    n=0
-    until git push; do
-        n=\$((n + 1)); [ \$n -ge 20 ] && { echo '[ERROR] push still rejected'; return 1; }
-        echo '[INFO] push rejected; rebasing'; sleep \$(((RANDOM % 8) + 2)); git pull --rebase --autostash || return 1
-    done
-}
+# Pull the generated tree back from the node.
+if [ "${script_dir}" = "." ]; then rpath="/home/ubuntu/benchmark"; else rpath="/home/ubuntu/benchmark/${script_dir}"; fi
+scp -r -o StrictHostKeyChecking=accept-new -i "${ssh_key}" "ubuntu@${benchmark_ip}:${rpath}" "$work/src" \
+    || fail "scp from node failed"
+src="$work/src"
 
 copy_tree() {  # <src_root> <dest_dir>
-    mkdir -p \"\$2\" \
-    && cp -r \"\$1/${vnnlib_dir}\" \"\$2/vnnlib\" \
-    && cp -r \"\$1/${onnx_dir}\" \"\$2/onnx\" \
-    && cp \"\$1/${csv_file}\" \"\$2/instances.csv\"
+    mkdir -p "$2" \
+    && cp -r "$1/${vnnlib_dir}" "$2/vnnlib" \
+    && cp -r "$1/${onnx_dir}" "$2/onnx" \
+    && cp "$1/${csv_file}" "$2/instances.csv"
 }
-
 write_readme() {  # <base_dir>
-    cat > \"\$1/README.md\" <<README_EOF
+    cat > "$1/README.md" <<README_EOF
 # ${name}
 
 Auto-generated by the submission pipeline; overwritten on every regeneration.
@@ -71,28 +78,27 @@ Do not edit by hand.
 - Source repository: ${repository}
 - Source commit: ${hash}
 - Generation seed: ${seed}
-- Exported (UTC): \$(date -u +%Y-%m-%dT%H:%M:%SZ)
+- Exported (UTC): $(date -u +%Y-%m-%dT%H:%M:%SZ)
 README_EOF
 }
 
-rm -rf all_benchmarks \
-    && git clone ${benchmarks_repo} all_benchmarks \
-    && cd all_benchmarks \
-    && git lfs install --local \
-    && git lfs track '*.onnx' '*.vnnlib' \
-    && if [ \"${uses_categories}\" = \"true\" ]; then \
-        rm -rf ${base} && copy_tree \"\$src\" ${base}; \
-    else \
-        rm -rf ${base}/${vnnlib_version} && copy_tree \"\$src\" ${base}/${vnnlib_version} \
-        && if [ -d \"\$src/vnnlib2\" ]; then rm -rf ${base}/2.0 && copy_tree \"\$src/vnnlib2\" ${base}/2.0; fi; \
-    fi \
-    && write_readme ${base} \
-    && git add .gitattributes ${base} \
-    && git pull --rebase --autostash \
-    && git commit -m \"Update ${name}\" -m \"${repository} @ ${hash}, seed ${seed}\" \
-    && push_with_retry \
-    && curl --retry 100 --retry-connrefused ${ROOT_URL}/update/${task_id}/success \
-    || curl --retry 100 --retry-connrefused ${ROOT_URL}/update/${task_id}/failure
-REMOTE_SCRIPT
-chmod +x ${remote_script_path}
-tmux new-session -d -s exporting /bin/bash ${remote_script_path}"
+if [ "${uses_categories}" = "true" ]; then
+    rm -rf "${base}" && copy_tree "$src" "${base}" || fail "copy failed"
+else
+    rm -rf "${base}/${vnnlib_version}" && copy_tree "$src" "${base}/${vnnlib_version}" || fail "copy failed"
+    if [ -d "$src/vnnlib2" ]; then rm -rf "${base}/2.0"; copy_tree "$src/vnnlib2" "${base}/2.0" || fail "copy failed"; fi
+fi
+write_readme "${base}"
+
+git add .gitattributes "${base}"
+git commit -q -m "Update ${name}" -m "${repository} @ ${hash}, seed ${seed}" || fail "commit failed"
+
+# Push only when a remote is configured; rebase-and-retry on non-fast-forward.
+if [ -n "${benchmarks_repo}" ]; then
+    n=0
+    until git push; do
+        n=$((n + 1)); [ "$n" -ge 20 ] && fail "push rejected"
+        git pull --rebase --autostash || fail "rebase failed"
+    done
+fi
+notify success
