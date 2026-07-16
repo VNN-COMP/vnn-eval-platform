@@ -48,6 +48,24 @@ def test_validate_benchmark_requires_repository():
     comp.validate_submission(b)  # no raise
 
 
+def test_benchmark_auto_publishes_when_export_done():
+    from comp_eval_platform.competitions import get_competition
+    from comp_eval_platform.core.models import Benchmark, Category, Task
+
+    from vnn_comp import kinds
+
+    cat = Category.objects.create(name="default")
+    b = Benchmark.objects.create(owner=_user(), category=cat, name="autopub",
+                                 extra={"repository": "https://example.com/repo.git"})
+    assert b.published is False
+    task = Task.objects.create(owner=b.owner, benchmark=b)
+    get_competition().build_steps(task)
+    # Completing the export step publishes the benchmark (no manual publish step).
+    task.step_set.get(kind=kinds.BENCHMARK_EXPORT).handler.on_marked_done()
+    b.refresh_from_db()
+    assert b.published is True
+
+
 def test_build_steps_basic_graph():
     from comp_eval_platform.competitions import get_competition
     from comp_eval_platform.core.models import Benchmark, Category, Task, Tool

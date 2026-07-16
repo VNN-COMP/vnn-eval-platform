@@ -190,6 +190,22 @@ class BenchmarkExportHandler(StepHandler):
         })
         _ping("benchmark", "export_benchmark.sh", params)
 
+    def on_marked_done(self):
+        """Auto-publish once the benchmark is generated, exported, and validates —
+        a successful run is the publish gate; there is no manual publish step."""
+        from comp_eval_platform.competitions import get_competition
+
+        b = _benchmark_of(self.step)
+        if b is None or b.published:
+            return
+        try:
+            get_competition().validate_submission(b)
+        except Exception as exc:
+            print(f"benchmark {b} left unpublished (validation failed): {exc}")
+            return
+        b.published = True
+        b.save(update_fields=["published"])
+
     def is_instance_loss_valid_end(self) -> bool:
         return True  # a lost node during export shouldn't fail the whole task
 
