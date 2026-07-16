@@ -27,6 +27,14 @@ Configure via env (see `.env.example`).
 For `EXECUTION_BACKEND=local_docker`, uncomment the docker-socket mount in
 `docker-compose.yml` and vendor the node scripts into `vnn_comp/scripts/` first.
 
+## Benchmark storage
+
+Generated benchmarks are committed to a git repo. By default this is a **local**
+repo under `DATA_DIR` (persistent volume) on the deploy host — no external repo
+or deploy key needed. Set `BENCHMARKS_PUSH_REPO` (+ `BENCHMARKS_DEPLOY_KEY`) to
+push to a remote instead. The export runs backend-side, so the backend host
+needs `git`, `git-lfs`, and `openssh-client`.
+
 ## Without Docker
 
 ```bash
