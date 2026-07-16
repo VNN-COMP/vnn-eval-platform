@@ -66,6 +66,45 @@ def test_benchmark_auto_publishes_when_export_done():
     assert b.published is True
 
 
+def test_generate_records_resolved_commit(monkeypatch):
+    from comp_eval_platform.competitions import get_competition
+    from comp_eval_platform.core.models import Benchmark, Category, Node, Task
+
+    from vnn_comp import kinds
+
+    cat = Category.objects.create(name="default")
+    b = Benchmark.objects.create(owner=_user(), category=cat, name="rev",
+                                 extra={"repository": "https://example.com/repo.git"})  # no hash
+    task = Task.objects.create(owner=b.owner, benchmark=b)
+    get_competition().build_steps(task)
+    Node.objects.create(id="n1", node_type="local", state="running",
+                        reachability="ok", ip="1.2.3.4", task=task)
+    monkeypatch.setattr("comp_eval_platform.compute.shell.node_exec",
+                        lambda ip, cmd, **kw: "deadbeefcafe\n")
+    task.step_set.get(kind=kinds.GENERATE).handler.on_marked_done()
+    b.refresh_from_db()
+    assert b.extra["hash"] == "deadbeefcafe"
+
+
+def test_toolkit_records_resolved_commit(monkeypatch):
+    from comp_eval_platform.competitions import get_competition
+    from comp_eval_platform.core.models import Category, Node, Task, Tool
+
+    from vnn_comp import kinds
+
+    cat = Category.objects.create(name="default")
+    tool = Tool.objects.create(owner=_user(), category=cat, name="t", repository="https://x/y", hash="")
+    task = Task.objects.create(owner=tool.owner, tool=tool)
+    get_competition().build_steps(task)
+    Node.objects.create(id="n2", node_type="local", state="running",
+                        reachability="ok", ip="1.2.3.4", task=task)
+    monkeypatch.setattr("comp_eval_platform.compute.shell.node_exec",
+                        lambda ip, cmd, **kw: "feedface1234\n")
+    task.step_set.get(kind=kinds.INSTALL).handler.on_marked_done()
+    tool.refresh_from_db()
+    assert tool.hash == "feedface1234"
+
+
 def test_build_steps_basic_graph():
     from comp_eval_platform.competitions import get_competition
     from comp_eval_platform.core.models import Benchmark, Category, Task, Tool

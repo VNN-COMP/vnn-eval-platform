@@ -46,6 +46,20 @@ class InstallHandler(StepHandler):
     def retry_until_success(self) -> bool:
         return True  # installs are flaky (network); retry rather than fail the task
 
+    def on_marked_done(self):
+        """Record the exact installed commit so a tool submitted as 'latest' is
+        reproducible. Assumes install_tool.sh clones the tool repo to
+        /home/ubuntu/toolkit; best-effort (no-op if unavailable)."""
+        from comp_eval_platform.compute.shell import node_exec
+
+        ip, tool = self.node_ip, self.task.tool
+        if ip is None or tool is None:
+            return
+        sha = node_exec(ip, "git -C /home/ubuntu/toolkit rev-parse HEAD").strip()
+        if sha and sha != tool.hash:
+            tool.hash = sha
+            tool.save(update_fields=["hash"])
+
 
 @register_step_handler
 class RunBenchmarkHandler(StepHandler):
@@ -159,6 +173,19 @@ class GenerateHandler(StepHandler):
             return
         _b, params = _generation_params(self.task, self.step)
         _ping("benchmark", "generate_benchmark.sh", params)
+
+    def on_marked_done(self):
+        """Record the exact commit that was generated, so a benchmark submitted as
+        'latest' (no hash) is reproducible. The node is still up (export runs next)."""
+        from comp_eval_platform.compute.shell import node_exec
+
+        ip, b = self.node_ip, _benchmark_of(self.step)
+        if ip is None or b is None:
+            return
+        sha = node_exec(ip, "git -C /home/ubuntu/benchmark rev-parse HEAD").strip()
+        if sha:
+            b.extra = {**(b.extra or {}), "hash": sha}
+            b.save(update_fields=["extra"])
 
 
 @register_step_handler
