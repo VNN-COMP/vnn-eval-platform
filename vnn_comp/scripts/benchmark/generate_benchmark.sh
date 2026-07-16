@@ -2,7 +2,9 @@
 # Generate a benchmark's instances on the node, then report back.
 #
 # Clones the source git repo @ ${hash}, runs its generator
-# (generate_properties.py ${seed}) in an isolated uv/python env, normalizes the
+# (generate_properties.py ${seed}) in an isolated uv/python env — its
+# requirements.txt if present, else a legacy baseline dep set on Python 3.9 for
+# older benchmarks that ship no requirements — normalizes the
 # emitted instances.csv, and — for VNNLIB 1.0 — best-effort converts to VNNLIB 2.0
 # (in a dedicated Python 3.12 venv, which to_vnnlib2.py's syntax requires). The
 # remote script POSTs the log tail to ${ROOT_URL}/update/${task_id}/success|failure,
@@ -51,9 +53,19 @@ rm -rf benchmark \
     && ensure_uv \
     && VENV=/home/ubuntu/.venvs/gen-${benchmark_id} \
     && rm -rf \${VENV} && mkdir -p /home/ubuntu/.venvs \
-    && uv venv --seed \${VENV} \
-    && \${VENV}/bin/python -m pip install --upgrade pip \
-    && if [ -f requirements.txt ]; then \${VENV}/bin/python -m pip install -r requirements.txt; fi \
+    && if [ -f requirements.txt ]; then \
+        uv venv --seed \${VENV} \
+        && \${VENV}/bin/python -m pip install --upgrade pip \
+        && \${VENV}/bin/python -m pip install -r requirements.txt; \
+    else \
+        echo '[INFO] no requirements.txt; installing legacy baseline deps on Python 3.9'; \
+        uv venv --python 3.9 --seed \${VENV} \
+        && \${VENV}/bin/python -m pip install --upgrade pip \"setuptools<66\" wheel \
+        && \${VENV}/bin/python -m pip install \
+            matplotlib==3.5.1 mxnet==1.9.1 numpy==1.23 onnx==1.14.0 onnxruntime==1.15.0 \
+            opencv-python==4.7.0.72 pandas==2.0.2 protobuf==4.23.2 scipy==1.10.1 \
+            skl2onnx==1.14.1 tensorflow==2.8.0 torch==1.10.2 torchvision==0.11.3; \
+    fi \
     && \${VENV}/bin/python generate_properties.py ${seed} \
     && if [ ! -d ${vnnlib_dir} ] && [ -d generated_vnnlib ]; then mv generated_vnnlib ${vnnlib_dir}; fi \
     && python3 /home/ubuntu/normalize_instances.py ${csv_file} ${onnx_dir} ${vnnlib_dir} \
