@@ -237,6 +237,32 @@ def test_parse_results_reads_the_official_csv_layout(tmp_path):
     assert records[0].extra == {"prepare_time": 0.30}
 
 
+def test_only_the_benchmark_run_reports_a_timeout_cap():
+    """The timer's cap must name a limit that exists: only BenchmarkRunHandler enforces
+    one, so every other kind is covered by the task-wide backstop instead."""
+    from comp_eval_platform.competitions import get_competition
+    from comp_eval_platform.core.models import Benchmark, Category, RuntimeSettings, Task, Tool
+
+    from vnn_comp import kinds
+
+    s = RuntimeSettings.get()
+    s.benchmark_timeout = 6
+    s.save()
+
+    cat = Category.objects.create(name="default")
+    tool = Tool.objects.create(owner=_user(), category=cat, name="t", repository="r")
+    Benchmark.objects.create(owner=_user(), category=cat, name="b1", published=True)
+    task = Task.objects.create(owner=tool.owner, tool=tool)
+    comp = get_competition()
+    comp.build_steps(task)
+
+    caps = {st.kind: comp.step_timeout_hours(st) for st in task.step_set.all()}
+    assert caps[kinds.RUN_BENCHMARK] == 6
+    assert caps[kinds.INSTALL] is None
+    assert caps[kinds.CHECK_RESULTS] is None
+    assert caps["shutdown"] is None
+
+
 def test_run_folder_carries_the_year_the_scorer_expects():
     """The scorer rebuilds each witness path as ../<tool>/<year>_<category>/<..>.gz, so a
     folder without the year makes every counterexample read as MISSING — and silently, a

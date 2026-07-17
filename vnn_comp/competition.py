@@ -166,6 +166,15 @@ class VNNCompetition(Competition):
             rows=sorted(rows.values(), key=lambda x: (-x["solved"], x["time"])),
         )
 
+    def step_timeout_hours(self, step):
+        """Only the per-benchmark run is capped (BenchmarkRunHandler.while_active); every
+        other step is covered by the task-wide node backstop, not a step timer."""
+        from comp_eval_platform.core.models import RuntimeSettings
+
+        if step.kind != kinds.RUN_BENCHMARK:
+            return None
+        return RuntimeSettings.get().benchmark_timeout
+
     def exported_artifacts_dir(self, step) -> str:
         """One run's exported folder (results.csv + counterexamples). Only the export
         step has one, so only it offers a download — a run submitted without
