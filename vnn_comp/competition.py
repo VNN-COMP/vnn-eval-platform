@@ -61,7 +61,15 @@ class VNNCompetition(Competition):
                 add("assign"),
                 add(kinds.INSTALL, run_as_root=opts.get("install_as_root", True)),
             ]
-            if opts.get("pause"):
+            # A hold here lets the submitter finish the install by hand before the
+            # post-install script runs; `manual_installation_step` is the pre-port key.
+            if opts.get("pause") or opts.get("manual_installation_step"):
+                steps.append(add(PAUSE_KIND))
+            # Always present: it is the tool's own hook, and a submission that has no
+            # script is a no-op rather than a skipped step.
+            steps.append(add(kinds.POST_INSTALL, run_as_root=opts.get(
+                "post_install_as_root", opts.get("run_post_installation_script_as_root", True))))
+            if opts.get("pause_after_postinstallation"):
                 steps.append(add(PAUSE_KIND))
             # Per-benchmark runs. If the submission selected specific benchmarks
             # (from the form), run exactly those; otherwise the whole category.

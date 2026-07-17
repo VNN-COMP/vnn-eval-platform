@@ -122,7 +122,7 @@ def test_build_steps_basic_graph():
 
     kinds_in_order = list(task.step_set.order_by("order").values_list("kind", flat=True))
     assert kinds_in_order == [
-        kinds.CREATE, "assign", kinds.INSTALL,
+        kinds.CREATE, "assign", kinds.INSTALL, kinds.POST_INSTALL,
         kinds.RUN_BENCHMARK, kinds.RUN_BENCHMARK,  # only the two published benchmarks
         "shutdown",
     ]
@@ -143,8 +143,31 @@ def test_build_steps_with_pause_and_export():
     get_competition().build_steps(task)
 
     assert list(task.step_set.order_by("order").values_list("kind", flat=True)) == [
-        kinds.CREATE, "assign", kinds.INSTALL, "pause",
+        kinds.CREATE, "assign", kinds.INSTALL, "pause", kinds.POST_INSTALL,
         kinds.RUN_BENCHMARK, kinds.EXPORT,
+        "shutdown",
+    ]
+
+
+def test_build_steps_pause_after_post_install():
+    """The pre-port option names still arrive on imported tools."""
+    from comp_eval_platform.competitions import get_competition
+    from comp_eval_platform.core.models import Benchmark, Category, Task, Tool
+
+    from vnn_comp import kinds
+
+    cat = Category.objects.create(name="default")
+    tool = Tool.objects.create(owner=_user(), category=cat, name="t", repository="r",
+                               extra={"manual_installation_step": True,
+                                      "pause_after_postinstallation": True})
+    Benchmark.objects.create(owner=_user(), category=cat, name="b1", published=True)
+
+    task = Task.objects.create(owner=tool.owner, tool=tool)
+    get_competition().build_steps(task)
+
+    assert list(task.step_set.order_by("order").values_list("kind", flat=True)) == [
+        kinds.CREATE, "assign", kinds.INSTALL, "pause", kinds.POST_INSTALL, "pause",
+        kinds.RUN_BENCHMARK,
         "shutdown",
     ]
 
