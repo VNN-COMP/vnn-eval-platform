@@ -14,8 +14,8 @@
 # logged and skipped rather than failing the task — losing a finished run because a venv
 # broke would be worse than not having the check (the old harness did the same).
 #
-# Params (env, from the step handler): benchmark_ip task_id benchmark_name tool_name
-# scoring_repo scoring_ref. ROOT_URL from the backend env; NODE_SSH_KEY locates the key.
+# Params (env, from the step handler): benchmark_ip task_id benchmark_name
+# run_folder tool_name scoring_repo scoring_ref. ROOT_URL from the backend env; NODE_SSH_KEY locates the key.
 set -eu
 
 ssh_key="${NODE_SSH_KEY:-$HOME/.ssh/vnncomp.pem}"
@@ -65,7 +65,7 @@ rm -rf \${scoring} && mkdir -p \${scoring} && cd \${scoring} \
     || skip 'could not fetch SCORING/ from ${scoring_repo}'
 
 # The scorer reads the run's folder next to SCORING/, laid out as in the results repo.
-run_dir=\${scoring}/${tool_name}/${benchmark_name}
+run_dir=\${scoring}/${tool_name}/${run_folder}
 mkdir -p \${run_dir}
 cp \${results_csv} \${run_dir}/results.csv
 cp /home/ubuntu/logs/counterexamples/${benchmark_name}/*.counterexample \${run_dir}/ 2>/dev/null \

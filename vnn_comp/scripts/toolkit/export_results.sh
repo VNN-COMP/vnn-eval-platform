@@ -7,10 +7,11 @@
 # pushed to as well; its deploy key stays on the host, never copied to a node.
 # The step is reported done via ${ROOT_URL}/update/${task_id}/success|failure.
 #
-# Layout: <tool>/<benchmark>/results.csv plus *.counterexample.gz.
+# Layout: <tool>/<year>_<benchmark>/results.csv plus *.counterexample.gz
+# (see vnn_comp/export_layout.py: the scorer needs the year in the path).
 #
-# Params (env, from the step handler): benchmark_ip task_id benchmark_name tool_name
-# results_repo deploy_key local_repo. ROOT_URL/NODE_SSH_KEY from the environment.
+# Params (env, from the step handler): benchmark_ip task_id benchmark_name
+# run_folder tool_name results_repo deploy_key local_repo. ROOT_URL/NODE_SSH_KEY from the environment.
 set -eu
 
 LOGFILE="$(mktemp)"
@@ -54,7 +55,7 @@ if [ -n "${results_repo}" ]; then
     git remote add origin "${results_repo}" 2>/dev/null || git remote set-url origin "${results_repo}"
 fi
 
-base="${tool_name}/${benchmark_name}"
+base="${tool_name}/${run_folder}"
 rm -rf "$base"
 mkdir -p "$base"
 cp "$work/results.csv" "$base/results.csv" || fail "copying results.csv failed"

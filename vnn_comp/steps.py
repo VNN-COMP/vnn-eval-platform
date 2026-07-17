@@ -237,7 +237,7 @@ class CheckResultsHandler(StepHandler):
     def execute(self):
         from django.conf import settings
 
-        from .export_layout import slug
+        from .export_layout import run_folder, slug
 
         if self.node_ip is None:
             self.task.step_succeeded(check_status=False)  # validation is best-effort
@@ -248,6 +248,7 @@ class CheckResultsHandler(StepHandler):
             "benchmark_ip": self.node_ip,
             "task_id": str(self.task.id),
             "benchmark_name": b.name if b else "",
+            "run_folder": run_folder(b.name) if b else "",
             "tool_name": slug(tool.name) if tool else "tool",
             "scoring_repo": settings.SCORING_REPO,
             "scoring_ref": settings.SCORING_REF,
@@ -393,7 +394,7 @@ class ExportHandler(StepHandler):
         if self.node_ip is None:
             self.task.step_succeeded(check_status=False)  # export is best-effort
             return
-        from .export_layout import slug
+        from .export_layout import run_folder, slug
 
         b = _benchmark_of(self.step)
         tool = self.task.tool
@@ -401,6 +402,7 @@ class ExportHandler(StepHandler):
             "benchmark_ip": self.node_ip,
             "task_id": str(self.task.id),
             "benchmark_name": b.name if b else "",
+            "run_folder": run_folder(b.name) if b else "",
             "tool_name": slug(tool.name) if tool else "tool",
         }
         params.update(_repo_params("results"))
