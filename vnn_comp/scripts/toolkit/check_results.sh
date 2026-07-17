@@ -72,6 +72,13 @@ cp /home/ubuntu/logs/counterexamples/${benchmark_name}/*.counterexample \${run_d
     || echo '[INFO] no counterexamples in this run to check'
 gzip -f \${run_dir}/*.counterexample 2>/dev/null || true
 
+# Keep every cache the scorer writes inside \${scoring}, which we just created as
+# ubuntu. A tool installed as root leaves root-owned files under \$HOME/.cache, and
+# sharing that cache is what would otherwise make uv/pip fail here with EACCES.
+export UV_CACHE_DIR=\${scoring}/.uv-cache
+export UV_PYTHON_INSTALL_DIR=\${scoring}/.uv-python
+export PIP_CACHE_DIR=\${scoring}/.pip-cache
+
 cd \${scoring}/SCORING || skip 'SCORING/ is missing from the results repo'
 ensure_uv || skip 'uv is unavailable'
 if command -v python3.12 >/dev/null 2>&1; then

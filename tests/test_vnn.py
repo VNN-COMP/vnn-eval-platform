@@ -173,6 +173,52 @@ def test_build_steps_pause_after_post_install():
     ]
 
 
+def test_root_flags_come_from_the_submission_form():
+    """The form's key names, verbatim. Reading a name the form never sends silently
+    falls back to the default on every submission, which is how the install once ran
+    as root against the submitter's wishes."""
+    from comp_eval_platform.competitions import get_competition
+    from comp_eval_platform.core.models import Benchmark, Category, Task, Tool
+
+    from vnn_comp import kinds
+
+    cat = Category.objects.create(name="default")
+    tool = Tool.objects.create(owner=_user(), category=cat, name="t", repository="r",
+                               extra={"run_installation_script_as_root": True,
+                                      "run_post_installation_script_as_root": False,
+                                      "run_toolkit_as_root": True})
+    Benchmark.objects.create(owner=_user(), category=cat, name="b1", published=True)
+
+    task = Task.objects.create(owner=tool.owner, tool=tool)
+    get_competition().build_steps(task)
+    as_root = dict(task.step_set.values_list("kind", "run_as_root"))
+
+    assert as_root[kinds.INSTALL] is True
+    assert as_root[kinds.POST_INSTALL] is False
+    assert as_root[kinds.RUN_BENCHMARK] is True
+    assert as_root[kinds.CHECK_RESULTS] is False  # the scorer is never privileged
+
+
+def test_root_flags_default_off():
+    """A tool that asked for nothing gets nothing: root leaves root-owned files in ~
+    that the unprivileged scoring step then cannot write."""
+    from comp_eval_platform.competitions import get_competition
+    from comp_eval_platform.core.models import Benchmark, Category, Task, Tool
+
+    from vnn_comp import kinds
+
+    cat = Category.objects.create(name="default")
+    tool = Tool.objects.create(owner=_user(), category=cat, name="t", repository="r")
+    Benchmark.objects.create(owner=_user(), category=cat, name="b1", published=True)
+
+    task = Task.objects.create(owner=tool.owner, tool=tool)
+    get_competition().build_steps(task)
+    as_root = dict(task.step_set.values_list("kind", "run_as_root"))
+
+    assert not any(as_root[k] for k in
+                   (kinds.INSTALL, kinds.POST_INSTALL, kinds.RUN_BENCHMARK, kinds.CHECK_RESULTS))
+
+
 def test_parse_results_reads_the_official_csv_layout(tmp_path):
     """category,onnx,vnnlib,prepare_time,result,runtime — what the scorer also reads.
     The name is derived backend-side from the two paths."""

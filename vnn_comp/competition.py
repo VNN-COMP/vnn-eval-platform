@@ -56,10 +56,16 @@ class VNNCompetition(Competition):
             run_networks = opts.get("run_networks", "all")
             export = bool(opts.get("export_results", False))
 
+            # The submission form's own key names. Unchecked means unprivileged, and a
+            # root install writes root-owned files into ~ that later unprivileged steps
+            # (the scorer) cannot touch — so default off rather than on.
+            def as_root(key):
+                return bool(opts.get(key, False))
+
             steps += [
                 add(kinds.CREATE),
                 add("assign"),
-                add(kinds.INSTALL, run_as_root=opts.get("install_as_root", True)),
+                add(kinds.INSTALL, run_as_root=as_root("run_installation_script_as_root")),
             ]
             # A hold here lets the submitter finish the install by hand before the
             # post-install script runs; `manual_installation_step` is the pre-port key.
@@ -67,8 +73,8 @@ class VNNCompetition(Competition):
                 steps.append(add(PAUSE_KIND))
             # Always present: it is the tool's own hook, and a submission that has no
             # script is a no-op rather than a skipped step.
-            steps.append(add(kinds.POST_INSTALL, run_as_root=opts.get(
-                "post_install_as_root", opts.get("run_post_installation_script_as_root", True))))
+            steps.append(add(kinds.POST_INSTALL,
+                             run_as_root=as_root("run_post_installation_script_as_root")))
             if opts.get("pause_after_postinstallation"):
                 steps.append(add(PAUSE_KIND))
             # Per-benchmark runs. If the submission selected specific benchmarks
@@ -81,7 +87,7 @@ class VNNCompetition(Competition):
             for b in benchmarks:
                 steps.append(add(kinds.RUN_BENCHMARK, benchmark_id=str(b.id),
                                  run_networks=run_networks, version=version,
-                                 run_as_root=opts.get("run_as_root", True)))
+                                 run_as_root=as_root("run_toolkit_as_root")))
                 # Validate the run's witnesses before exporting them, so what is
                 # published carries the scorer's verdict on each counterexample.
                 steps.append(add(kinds.CHECK_RESULTS, benchmark_id=str(b.id), run_as_root=False))
