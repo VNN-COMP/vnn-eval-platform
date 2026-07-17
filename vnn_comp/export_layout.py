@@ -17,8 +17,9 @@ def slug(name: str) -> str:
 
 def run_folder(benchmark_name: str) -> str:
     """``<year>_<benchmark>``. The year is load-bearing, not decoration: the official
-    scorer finds a witness's benchmark repo by looking for the year *inside* the
-    counterexample's path (Settings.BENCHMARK_REPOS), and asserts if it is absent."""
+    scorer prepends it to the category it reads from results.csv, then looks for each
+    witness at ``../<tool>/<year>_<category>/<net>_<prop>.counterexample.gz`` — so a
+    folder named anything else makes every counterexample read as missing."""
     from django.conf import settings
 
     return f"{settings.COMPETITION_YEAR}_{benchmark_name}"

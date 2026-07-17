@@ -30,8 +30,9 @@ set -u
 bench_rel="vnncomp${competition_year}_benchmarks/benchmarks/${benchmark_name}/${vnnlib_version}"
 bench_dir="/home/ubuntu/${bench_rel}"
 tool_dir="/home/ubuntu/toolkit/${script_dir}"
-# The scorer asserts the year is the category's first segment (`cat[4] == "_"`).
-category="${competition_year}_${benchmark_name}"
+# Bare, no year: this is the tool's `category` argument, and the scorer prepends the
+# year itself before resolving benchmarks/<category>/<version>/instances.csv.
+category="${benchmark_name}"
 results="/home/ubuntu/logs/results_${benchmark_name}.csv"
 ce_dir="/home/ubuntu/logs/counterexamples/${benchmark_name}"
 log="/home/ubuntu/logs/run_${benchmark_name}.log"

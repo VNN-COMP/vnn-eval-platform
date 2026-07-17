@@ -237,6 +237,15 @@ def test_parse_results_reads_the_official_csv_layout(tmp_path):
     assert records[0].extra == {"prepare_time": 0.30}
 
 
+def test_run_folder_carries_the_year_the_scorer_expects():
+    """The scorer rebuilds each witness path as ../<tool>/<year>_<category>/<..>.gz, so a
+    folder without the year makes every counterexample read as MISSING — and silently, a
+    missing witness being a legitimate verdict rather than an error."""
+    from vnn_comp.export_layout import run_folder
+
+    assert run_folder("acasxu") == "2026_acasxu"
+
+
 def test_ensure_instances_records_cases_and_is_idempotent():
     from comp_eval_platform.core.models import Benchmark, Category, Instance
 

@@ -95,7 +95,11 @@ uv venv --python \${SCORING_PYTHON} --seed \${venv} || skip 'could not create th
     && \${venv}/bin/python3 -m pip install -r requirements.txt \
     || skip 'could not install the scorer requirements'
 
-\${venv}/bin/python3 process_results.py --single-benchmark \${run_dir}/results.csv \
+# A path relative to SCORING/, never absolute: the scorer reads the tool name out of the
+# path's second segment and rebuilds each witness path as ../<tool>/<run folder>/<..>.gz,
+# so an absolute path silently makes the tool 'home' and every counterexample missing.
+\${venv}/bin/python3 process_results.py \
+    --single-benchmark ../${tool_name}/${run_folder}/results.csv \
     || skip 'process_results.py failed'
 
 # Keep each witness's verdict beside its counterexample, so the export ships it.
