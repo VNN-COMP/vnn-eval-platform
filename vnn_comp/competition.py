@@ -108,21 +108,27 @@ class VNNCompetition(Competition):
 
     # (4) Result parsing → normalized records -----------------------------
     def parse_results(self, run, artifacts_dir: str) -> list:
-        """Read the node's ``results.csv`` (instance,result,time) into records."""
+        """Read the node's ``results.csv`` (onnx,vnnlib,result,time) into records.
+
+        The node reports each case's two paths rather than a name, so the name is
+        derived here, the same way the benchmark's Instance rows were named."""
+        from .instances import instance_name
+
         path = os.path.join(artifacts_dir, "results.csv")
         records = []
         if not os.path.exists(path):
             return records
         with open(path, newline="") as fh:
             for row in csv.reader(fh):
-                if len(row) < 3:
+                if len(row) < 4:
                     continue
-                instance, result, time = row[0], row[1], row[2]
+                onnx, vnnlib, result, time = row[0], row[1], row[2], row[3]
                 try:
                     t = float(time)
                 except ValueError:
                     t = None
-                records.append(ResultRecord(instance=instance.strip(), result=result.strip(), time=t))
+                records.append(ResultRecord(instance=instance_name(onnx, vnnlib),
+                                            result=result.strip(), time=t))
         return records
 
     # (5) Scoring ---------------------------------------------------------

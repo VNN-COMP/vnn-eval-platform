@@ -2,8 +2,11 @@
 # Runs ON THE NODE (scp'd there by run_benchmark.sh, started under tmux).
 #
 # Loops one benchmark's instances through the tool's script contract and writes
-# logs/results_<benchmark>.csv as `instance,result,time` rows — the shape
-# VNNCompetition.parse_results reads back. Per the VNN-COMP rules:
+# logs/results_<benchmark>.csv as `onnx,vnnlib,result,time` rows — the shape
+# VNNCompetition.parse_results reads back. It echoes the instance's own two paths so
+# the backend can name the case itself (vnn_comp/instances.py) and link the result to
+# its Instance row; deriving a name here too would be a second rule to keep in step.
+# Per the VNN-COMP rules:
 #   * prepare_instance.sh v1 <category> <onnx> <vnnlib>            capped at 600s
 #   * run_instance.sh v1 <category> <onnx> <vnnlib> <out> <timeout> capped at the
 #     per-instance timeout from instances.csv
@@ -90,7 +93,7 @@ while IFS=, read -r onnx vnnlib tmo || [ -n "$onnx" ]; do
     fi
 
     echo "[INFO] ${name} -> ${verdict} in ${elapsed}s"
-    echo "${name},${verdict},${elapsed}" >> "$results"
+    echo "${onnx},${vnnlib},${verdict},${elapsed}" >> "$results"
     if [ "$verdict" = "sat" ] && [ -s "$out" ]; then
         cp "$out" "${ce_dir}/$(basename "$onnx" .onnx)_$(basename "$vnnlib" .vnnlib).counterexample"
     fi

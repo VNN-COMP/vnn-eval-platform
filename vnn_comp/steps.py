@@ -163,7 +163,7 @@ class RunBenchmarkHandler(StepHandler):
         import shutil
 
         from comp_eval_platform.competitions import get_competition
-        from comp_eval_platform.core.models import Instance, Result
+        from comp_eval_platform.core.models import Result
 
         b = self._benchmark()
         if b is None:
@@ -173,10 +173,26 @@ class RunBenchmarkHandler(StepHandler):
             return
         try:
             records = get_competition().parse_results(self.task, artifacts)
-            instances = {i.name: i for i in Instance.objects.filter(benchmark=b)}
-            Result.store(self.task, self.task.tool, b, b.category, records, instances_by_name=instances)
+            Result.store(self.task, self.task.tool, b, b.category, records,
+                         instances_by_name=self._instances(b))
         finally:
             shutil.rmtree(artifacts, ignore_errors=True)
+
+    def _instances(self, benchmark) -> dict:
+        """This benchmark's cases, keyed by name, so results link to their Instance row.
+        Recorded from the copy that actually ran, which also backfills a benchmark
+        generated before instances were recorded at all."""
+        from comp_eval_platform.compute.shell import node_exec
+        from comp_eval_platform.core.models import Instance
+
+        from .instances import ensure_instances
+
+        if self.node_ip is not None:
+            csv_text = node_exec(
+                self.node_ip, f"cat /home/ubuntu/benchmarks/{benchmark.name}/instances.csv 2>/dev/null")
+            if csv_text.strip():
+                return ensure_instances(benchmark, csv_text)
+        return {i.name: i for i in Instance.objects.filter(benchmark=benchmark)}
 
     def _fetch_artifacts(self):
         """Pull the run's results.csv off the node into a temp dir for parse_results.
@@ -271,8 +287,11 @@ class GenerateHandler(StepHandler):
 
     def on_marked_done(self):
         """Record the exact commit that was generated, so a benchmark submitted as
-        'latest' (no hash) is reproducible. The node is still up (export runs next)."""
+        'latest' (no hash) is reproducible, and the cases it generated. The node is
+        still up (export runs next)."""
         from comp_eval_platform.compute.shell import node_exec
+
+        from .instances import ensure_instances
 
         ip, b = self.node_ip, _benchmark_of(self.step)
         if ip is None or b is None:
@@ -281,6 +300,11 @@ class GenerateHandler(StepHandler):
         if sha:
             b.extra = {**(b.extra or {}), "hash": sha}
             b.save(update_fields=["extra"])
+        script_dir = (b.extra or {}).get("script_dir", ".") or "."
+        csv_file = (b.extra or {}).get("csv_file", "instances.csv")
+        csv_text = node_exec(ip, f"cat /home/ubuntu/benchmark/{script_dir}/{csv_file} 2>/dev/null")
+        if csv_text.strip():
+            ensure_instances(b, csv_text)
 
 
 @register_step_handler

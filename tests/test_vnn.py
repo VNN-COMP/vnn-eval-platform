@@ -173,14 +173,63 @@ def test_build_steps_pause_after_post_install():
 
 
 def test_parse_results_reads_csv(tmp_path):
+    """The node reports each case's two paths; the name is derived backend-side."""
     from comp_eval_platform.competitions import get_competition
 
-    (tmp_path / "results.csv").write_text("inst1,sat,1.5\ninst2,unsat,2.0\nbad_row\n")
+    (tmp_path / "results.csv").write_text(
+        "onnx/net_a.onnx,vnnlib/prop_1.vnnlib,sat,1.5\n"
+        "onnx/net_b.onnx,vnnlib/prop_1.vnnlib,unsat,2.0\n"
+        "bad_row\n"
+    )
     records = get_competition().parse_results(None, str(tmp_path))
     assert [(r.instance, r.result, r.time) for r in records] == [
-        ("inst1", "sat", 1.5),
-        ("inst2", "unsat", 2.0),
+        ("net_a/prop_1", "sat", 1.5),
+        ("net_b/prop_1", "unsat", 2.0),
     ]
+
+
+def test_ensure_instances_records_cases_and_is_idempotent():
+    from comp_eval_platform.core.models import Benchmark, Category, Instance
+
+    from vnn_comp.instances import ensure_instances
+
+    cat = Category.objects.create(name="default")
+    b = Benchmark.objects.create(owner=_user(), category=cat, name="acasxu")
+    csv_text = ("onnx/net_a.onnx,vnnlib/prop_1.vnnlib,116\n"
+                "onnx/net_b.onnx,vnnlib/prop_1.vnnlib,116\n")
+
+    by_name = ensure_instances(b, csv_text)
+
+    assert sorted(by_name) == ["net_a/prop_1", "net_b/prop_1"]
+    assert by_name["net_a/prop_1"].spec == {
+        "onnx": "onnx/net_a.onnx", "vnnlib": "vnnlib/prop_1.vnnlib", "timeout": 116.0,
+    }
+    ensure_instances(b, csv_text)  # a re-run must not duplicate them
+    assert Instance.objects.filter(benchmark=b).count() == 2
+
+
+def test_run_results_link_to_their_instance_rows(tmp_path):
+    """The whole point: a stored Result must resolve to the case it ran, which needs
+    the run's names and the benchmark's Instance names to agree."""
+    from comp_eval_platform.competitions import get_competition
+    from comp_eval_platform.core.models import Benchmark, Category, Result, Task, Tool
+
+    from vnn_comp.instances import ensure_instances
+
+    cat = Category.objects.create(name="default")
+    u = _user()
+    tool = Tool.objects.create(owner=u, category=cat, name="t", repository="r")
+    b = Benchmark.objects.create(owner=u, category=cat, name="acasxu")
+    task = Task.objects.create(owner=u, tool=tool)
+    instances = ensure_instances(b, "onnx/net_a.onnx,vnnlib/prop_1.vnnlib,116\n")
+
+    (tmp_path / "results.csv").write_text("onnx/net_a.onnx,vnnlib/prop_1.vnnlib,unsat,50.4\n")
+    records = get_competition().parse_results(task, str(tmp_path))
+    Result.store(task, tool, b, cat, records, instances_by_name=instances)
+
+    stored = Result.objects.get(task=task)
+    assert stored.instance is not None and stored.instance.name == "net_a/prop_1"
+    assert (stored.result, stored.time) == ("unsat", 50.4)
 
 
 def test_score_builds_scoreboard():
