@@ -209,6 +209,10 @@ class RunBenchmarkHandler(StepHandler):
         csv_text = node_exec(self.node_ip, f"cat /home/ubuntu/logs/results_{b.name}.csv 2>/dev/null")
         if not csv_text.strip():
             return None
+        # Keep the node's file verbatim: the submission page shows it as-is, and the
+        # node it lives on is torn down at the end of the task.
+        self.step.payload = {**(self.step.payload or {}), "results_csv": csv_text}
+        self.step.save(update_fields=["payload"])
         d = tempfile.mkdtemp(prefix=f"results_{self.task.id}_")
         with open(os.path.join(d, "results.csv"), "w") as fh:
             fh.write(csv_text)
