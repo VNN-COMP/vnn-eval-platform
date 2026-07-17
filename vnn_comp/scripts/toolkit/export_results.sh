@@ -61,6 +61,8 @@ cp "$work/results.csv" "$base/results.csv" || fail "copying results.csv failed"
 if [ -d "$work/counterexamples" ]; then
     cp "$work"/counterexamples/*.counterexample "$base/" 2>/dev/null || true
     gzip -f "$base"/*.counterexample 2>/dev/null || true
+    # The scorer's verdict on each witness, from the preceding validation step.
+    cp "$work"/counterexamples/*.counterexample.check.json "$base/" 2>/dev/null || true
 fi
 
 git add "$base"

@@ -82,6 +82,9 @@ class VNNCompetition(Competition):
                 steps.append(add(kinds.RUN_BENCHMARK, benchmark_id=str(b.id),
                                  run_networks=run_networks, version=version,
                                  run_as_root=opts.get("run_as_root", True)))
+                # Validate the run's witnesses before exporting them, so what is
+                # published carries the scorer's verdict on each counterexample.
+                steps.append(add(kinds.CHECK_RESULTS, benchmark_id=str(b.id), run_as_root=False))
                 if export:
                     steps.append(add(kinds.EXPORT, benchmark_id=str(b.id), version=version))
             steps.append(add(SHUTDOWN_KIND))

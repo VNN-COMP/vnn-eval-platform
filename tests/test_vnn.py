@@ -123,7 +123,8 @@ def test_build_steps_basic_graph():
     kinds_in_order = list(task.step_set.order_by("order").values_list("kind", flat=True))
     assert kinds_in_order == [
         kinds.CREATE, "assign", kinds.INSTALL, kinds.POST_INSTALL,
-        kinds.RUN_BENCHMARK, kinds.RUN_BENCHMARK,  # only the two published benchmarks
+        # only the two published benchmarks, each validated after it runs
+        kinds.RUN_BENCHMARK, kinds.CHECK_RESULTS, kinds.RUN_BENCHMARK, kinds.CHECK_RESULTS,
         "shutdown",
     ]
 
@@ -144,7 +145,7 @@ def test_build_steps_with_pause_and_export():
 
     assert list(task.step_set.order_by("order").values_list("kind", flat=True)) == [
         kinds.CREATE, "assign", kinds.INSTALL, "pause", kinds.POST_INSTALL,
-        kinds.RUN_BENCHMARK, kinds.EXPORT,
+        kinds.RUN_BENCHMARK, kinds.CHECK_RESULTS, kinds.EXPORT,
         "shutdown",
     ]
 
@@ -167,7 +168,7 @@ def test_build_steps_pause_after_post_install():
 
     assert list(task.step_set.order_by("order").values_list("kind", flat=True)) == [
         kinds.CREATE, "assign", kinds.INSTALL, "pause", kinds.POST_INSTALL, "pause",
-        kinds.RUN_BENCHMARK,
+        kinds.RUN_BENCHMARK, kinds.CHECK_RESULTS,
         "shutdown",
     ]
 

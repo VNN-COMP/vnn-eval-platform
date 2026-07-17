@@ -6,6 +6,8 @@ INSTALL = "vnn_install"
 #: like), else the one the tool repo ships. Same name the pre-port tasks used.
 POST_INSTALL = "vnn_post_install"
 RUN_BENCHMARK = "run_benchmark"  # counted by Task.effective_timeout_hours
+#: Validates a finished benchmark's counterexamples with the official scorer.
+CHECK_RESULTS = "vnn_check_results"
 EXPORT = "vnn_export"
 # Benchmark-submission pipeline (generate instances from a git repo, then push the
 # generated files to the benchmarks repo).

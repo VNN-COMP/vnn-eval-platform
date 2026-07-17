@@ -219,6 +219,44 @@ class RunBenchmarkHandler(StepHandler):
         return d
 
 
+@register_step_handler
+class CheckResultsHandler(StepHandler):
+    """Validate the benchmark's counterexamples with the official scorer.
+
+    Kept out of the run step: the scorer's verdict tallies belong in their own log, and
+    a scorer failure should not be mistaken for the tool failing.
+    """
+
+    kind = kinds.CHECK_RESULTS
+
+    @property
+    def node_log_path(self):
+        b = _benchmark_of(self.step)
+        return f"logs/check_{b.name}.log" if b else None
+
+    def execute(self):
+        from django.conf import settings
+
+        from .export_layout import slug
+
+        if self.node_ip is None:
+            self.task.step_succeeded(check_status=False)  # validation is best-effort
+            return
+        b = _benchmark_of(self.step)
+        tool = self.task.tool
+        _ping("toolkit", "check_results.sh", {
+            "benchmark_ip": self.node_ip,
+            "task_id": str(self.task.id),
+            "benchmark_name": b.name if b else "",
+            "tool_name": slug(tool.name) if tool else "tool",
+            "scoring_repo": settings.SCORING_REPO,
+            "scoring_ref": settings.SCORING_REF,
+        })
+
+    def is_instance_loss_valid_end(self) -> bool:
+        return True  # a lost node during validation shouldn't fail the whole task
+
+
 def _benchmark_of(step):
     from comp_eval_platform.core.models import Benchmark
 
