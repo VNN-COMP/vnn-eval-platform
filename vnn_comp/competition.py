@@ -150,6 +150,22 @@ class VNNCompetition(Competition):
             rows=sorted(rows.values(), key=lambda x: (-x["solved"], x["time"])),
         )
 
+    def exported_artifacts_dir(self, step) -> str:
+        """One run's exported folder (results.csv + counterexamples). Only the export
+        step has one, so only it offers a download — a run submitted without
+        export_results never pushed its artifacts anywhere."""
+        from comp_eval_platform.core.models import Benchmark
+
+        from .export_layout import results_dir
+
+        if step.kind != kinds.EXPORT:
+            return None
+        bench = Benchmark.objects.filter(id=step.payload.get("benchmark_id")).first()
+        tool = step.task.tool
+        if bench is None or tool is None:
+            return None
+        return results_dir(tool.name, bench.name)
+
     # (6) Presentation / export -------------------------------------------
     def presentation(self) -> Presentation:
         return Presentation(

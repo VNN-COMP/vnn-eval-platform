@@ -2,9 +2,9 @@
 # Store one benchmark run's results in a git repo.
 #
 # Runs on the backend host (like export_benchmark.sh): pulls results.csv and any
-# counterexamples off the node and commits them. Default (empty results_repo) -> a
-# persistent local repo under local_repo, no external setup. A configured remote is
-# cloned/pushed instead; its deploy key stays on the host, never copied to a node.
+# counterexamples off the node and commits them to the local results repo, which is
+# also what the submission page's download button serves. A configured remote is
+# pushed to as well; its deploy key stays on the host, never copied to a node.
 # The step is reported done via ${ROOT_URL}/update/${task_id}/success|failure.
 #
 # Layout: <tool>/<benchmark>/results.csv plus *.counterexample.gz.
@@ -28,21 +28,15 @@ notify() {  # success|failure — report completion to the backend, POSTing the 
 fail() { echo "[ERROR] $1"; notify failure; exit 1; }
 
 work="$(mktemp -d)"
-ephemeral=""
-cleanup() { rm -rf "$work"; rm -f "$LOGFILE"; [ -n "$ephemeral" ] && rm -rf "$ephemeral"; }
+cleanup() { rm -rf "$work"; rm -f "$LOGFILE"; }
 trap cleanup EXIT
 
-# Working repo: an ephemeral clone of the remote, or the persistent local repo.
-if [ -n "${results_repo}" ]; then
-    export GIT_SSH_COMMAND="ssh -i ${deploy_key} -o StrictHostKeyChecking=accept-new"
-    ephemeral="$(mktemp -d)"
-    repo_dir="$ephemeral"
-    git clone "${results_repo}" "$repo_dir" || fail "cloning the results repo failed"
-else
-    repo_dir="${local_repo}"
-    mkdir -p "$repo_dir"
-    [ -d "$repo_dir/.git" ] || git init -q "$repo_dir"
-fi
+# Always commit into the persistent local repo, even when pushing to a remote: it is
+# what the download endpoint serves, and a node is torn down right after this, so an
+# ephemeral clone would take the only copy of the run's artifacts with it.
+repo_dir="${local_repo}"
+mkdir -p "$repo_dir"
+[ -d "$repo_dir/.git" ] || git init -q "$repo_dir"
 
 # Pull the run's artifacts back from the node.
 scp -o StrictHostKeyChecking=accept-new -i "${ssh_key}" \
@@ -55,6 +49,10 @@ scp -r -o StrictHostKeyChecking=accept-new -i "${ssh_key}" \
 cd "$repo_dir"
 git config user.name 'VNN-Comp Bot'
 git config user.email 'noreply@vnn-comp'
+if [ -n "${results_repo}" ]; then
+    export GIT_SSH_COMMAND="ssh -i ${deploy_key} -o StrictHostKeyChecking=accept-new"
+    git remote add origin "${results_repo}" 2>/dev/null || git remote set-url origin "${results_repo}"
+fi
 
 base="${tool_name}/${benchmark_name}"
 rm -rf "$base"
@@ -77,9 +75,9 @@ git commit -q -m "Results: ${tool_name} on ${benchmark_name}" || fail "commit fa
 # Push only when a remote is configured; rebase-and-retry on non-fast-forward.
 if [ -n "${results_repo}" ]; then
     n=0
-    until git push; do
+    until git push -u origin HEAD; do
         n=$((n + 1)); [ "$n" -ge 20 ] && fail "push rejected"
-        git pull --rebase --autostash || fail "rebase failed"
+        git pull --rebase --autostash origin HEAD || fail "rebase failed"
     done
 fi
 echo "[INFO] exported ${base}"

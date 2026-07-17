@@ -221,13 +221,6 @@ def _benchmark_of(step):
     return Benchmark.objects.filter(id=step.payload.get("benchmark_id")).first()
 
 
-def _slug(name: str) -> str:
-    """A submission name as a git-path-safe folder (names carry spaces and punctuation)."""
-    import re
-
-    return re.sub(r"[^A-Za-z0-9._-]+", "_", name).strip("_") or "tool"
-
-
 def _repo_params(kind: str) -> dict:
     """Where a script reads/writes the ``benchmarks``/``results`` repo: the configured
     remote, else a persistent local repo under LOCAL_REPOS_DIR (local dev needs no
@@ -358,13 +351,15 @@ class ExportHandler(StepHandler):
         if self.node_ip is None:
             self.task.step_succeeded(check_status=False)  # export is best-effort
             return
+        from .export_layout import slug
+
         b = _benchmark_of(self.step)
         tool = self.task.tool
         params = {
             "benchmark_ip": self.node_ip,
             "task_id": str(self.task.id),
             "benchmark_name": b.name if b else "",
-            "tool_name": _slug(tool.name) if tool else "tool",
+            "tool_name": slug(tool.name) if tool else "tool",
         }
         params.update(_repo_params("results"))
         _ping("toolkit", "export_results.sh", params)
