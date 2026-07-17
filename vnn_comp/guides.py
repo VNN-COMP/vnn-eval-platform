@@ -298,8 +298,7 @@ def benchmark_guide() -> Guide:
                     {"type": "text", "text":
                         "Once the automated checks pass, announce your proposal in the "
                         "competition's [GitHub repository](https://github.com/VNN-COMP) so the "
-                        "organizers and the community can discuss and review it. Passing here "
-                        "means the tooling can run your benchmark; it is not the review itself."},
+                        "organizers and the community can discuss and review it."},
                 ],
             },
         ],
