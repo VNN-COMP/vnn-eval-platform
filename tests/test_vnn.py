@@ -172,20 +172,22 @@ def test_build_steps_pause_after_post_install():
     ]
 
 
-def test_parse_results_reads_csv(tmp_path):
-    """The node reports each case's two paths; the name is derived backend-side."""
+def test_parse_results_reads_the_official_csv_layout(tmp_path):
+    """category,onnx,vnnlib,prepare_time,result,runtime — what the scorer also reads.
+    The name is derived backend-side from the two paths."""
     from comp_eval_platform.competitions import get_competition
 
     (tmp_path / "results.csv").write_text(
-        "onnx/net_a.onnx,vnnlib/prop_1.vnnlib,sat,1.5\n"
-        "onnx/net_b.onnx,vnnlib/prop_1.vnnlib,unsat,2.0\n"
+        "acasxu,onnx/net_a.onnx,vnnlib/prop_1.vnnlib,0.30,sat,1.5\n"
+        "acasxu,onnx/net_b.onnx,vnnlib/prop_1.vnnlib,0.25,run_instance_timeout,116.0\n"
         "bad_row\n"
     )
     records = get_competition().parse_results(None, str(tmp_path))
     assert [(r.instance, r.result, r.time) for r in records] == [
         ("net_a/prop_1", "sat", 1.5),
-        ("net_b/prop_1", "unsat", 2.0),
+        ("net_b/prop_1", "run_instance_timeout", 116.0),
     ]
+    assert records[0].extra == {"prepare_time": 0.30}
 
 
 def test_ensure_instances_records_cases_and_is_idempotent():
@@ -223,7 +225,8 @@ def test_run_results_link_to_their_instance_rows(tmp_path):
     task = Task.objects.create(owner=u, tool=tool)
     instances = ensure_instances(b, "onnx/net_a.onnx,vnnlib/prop_1.vnnlib,116\n")
 
-    (tmp_path / "results.csv").write_text("onnx/net_a.onnx,vnnlib/prop_1.vnnlib,unsat,50.4\n")
+    (tmp_path / "results.csv").write_text(
+        "acasxu,onnx/net_a.onnx,vnnlib/prop_1.vnnlib,0.3,unsat,50.4\n")
     records = get_competition().parse_results(task, str(tmp_path))
     Result.store(task, tool, b, cat, records, instances_by_name=instances)
 

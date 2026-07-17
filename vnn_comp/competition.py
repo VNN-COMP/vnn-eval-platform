@@ -108,11 +108,18 @@ class VNNCompetition(Competition):
 
     # (4) Result parsing → normalized records -----------------------------
     def parse_results(self, run, artifacts_dir: str) -> list:
-        """Read the node's ``results.csv`` (onnx,vnnlib,result,time) into records.
+        """Read the node's ``results.csv`` into records.
 
-        The node reports each case's two paths rather than a name, so the name is
-        derived here, the same way the benchmark's Instance rows were named."""
+        Official harness layout: ``category,onnx,vnnlib,prepare_time,result,runtime``.
+        Rows carry the case's two paths rather than a name, so the name is derived
+        here, the same way the benchmark's Instance rows were named."""
         from .instances import instance_name
+
+        def number(value):
+            try:
+                return float(value)
+            except ValueError:
+                return None
 
         path = os.path.join(artifacts_dir, "results.csv")
         records = []
@@ -120,15 +127,15 @@ class VNNCompetition(Competition):
             return records
         with open(path, newline="") as fh:
             for row in csv.reader(fh):
-                if len(row) < 4:
+                if len(row) < 6:
                     continue
-                onnx, vnnlib, result, time = row[0], row[1], row[2], row[3]
-                try:
-                    t = float(time)
-                except ValueError:
-                    t = None
-                records.append(ResultRecord(instance=instance_name(onnx, vnnlib),
-                                            result=result.strip(), time=t))
+                _category, onnx, vnnlib, prepare_time, result, runtime = (c.strip() for c in row[:6])
+                records.append(ResultRecord(
+                    instance=instance_name(onnx, vnnlib),
+                    result=result,
+                    time=number(runtime),
+                    extra={"prepare_time": number(prepare_time)},
+                ))
         return records
 
     # (5) Scoring ---------------------------------------------------------
