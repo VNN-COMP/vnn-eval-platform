@@ -212,7 +212,7 @@ class VNNCompetition(Competition):
                 favicon="/api/competition/assets/favicon.png",
             ),
             landing=Landing(
-                tagline="The premier competition for neural network verification. Test your "
+                tagline="VNN-COMP is the premier competition for neural network verification. Test your "
                         "toolkit against cutting-edge benchmarks and compete with researchers worldwide.",
                 links=[
                     {"label": "Main Website", "url": "https://vnn-comp.github.io/"},
