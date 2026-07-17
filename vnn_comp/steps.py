@@ -261,6 +261,19 @@ class CheckResultsHandler(StepHandler):
             "scoring_ref": settings.SCORING_REF,
         })
 
+    def on_marked_done(self):
+        """Freeze the scorer's summary onto the step. Its log is already stored (the
+        node POSTs it with the callback), and it is the only place that says whether
+        each counterexample actually held up."""
+        from .scoring import parse_overall_summary, severity
+
+        summary = parse_overall_summary(self.step.logs or "")
+        if not summary:
+            return
+        self.step.payload = {**(self.step.payload or {}),
+                             "summary": summary, "severity": severity(summary)}
+        self.step.save(update_fields=["payload"])
+
     def is_instance_loss_valid_end(self) -> bool:
         return True  # a lost node during validation shouldn't fail the whole task
 

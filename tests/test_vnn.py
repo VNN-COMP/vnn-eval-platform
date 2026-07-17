@@ -256,3 +256,71 @@ def test_score_builds_scoreboard():
     board = get_competition().score(track)
     assert board.columns == ["tool", "solved", "time"]
     assert board.rows == [{"tool": "alpha", "solved": 1, "time": 3.0}]
+
+
+def test_parse_overall_summary_reads_the_scorers_report():
+    """The block process_results.py prints; its witness tallies are why we run it."""
+    from vnn_comp.scoring import parse_overall_summary, severity
+
+    log = (
+        "Checking ce path: ...\n"
+        "================================================================================\n"
+        "Overall Summary for vibecheck:\n"
+        "Total categories: 1\n"
+        "Total instances: 12\n"
+        "  - holds:   5\n"
+        "  - violated: 4\n"
+        "  - timeout:  2\n"
+        "  - error:    1\n"
+        "  - unknown:  0\n"
+        "Counterexample Summary:\n"
+        "  - valid:   2 (50.0%)\n"
+        "  - valid_with_tolerance: 1 (25.0%)\n"
+        "  - invalid: 1 (25.0%)\n"
+        "  - missing: 0 (0.0%)\n"
+        "================================================================================\n"
+    )
+    got = parse_overall_summary(log)
+    assert got["instances"] == 12
+    assert got["verdicts"] == {"holds": 5, "violated": 4, "timeout": 2, "error": 1, "unknown": 0}
+    assert got["witnesses"] == {"valid": 2, "valid_with_tolerance": 1, "invalid": 1, "missing": 0}
+    assert severity(got) == "error"  # an invalid witness (and an error) is not a clean run
+
+
+def test_summary_is_absent_until_the_scorer_reports():
+    from vnn_comp.scoring import parse_overall_summary, severity
+
+    assert parse_overall_summary("") is None
+    assert parse_overall_summary("[ERROR] skipping validation") is None
+    assert severity(None) == "unknown"
+
+
+def test_a_clean_run_reads_as_success():
+    from vnn_comp.scoring import parse_overall_summary, severity
+
+    log = ("Overall Summary for t:\nTotal instances: 3\n"
+           "  - holds:   2\n  - violated: 1\n  - timeout:  0\n  - error:    0\n  - unknown:  0\n"
+           "Counterexample Summary:\n  - valid:   1 (100.0%)\n"
+           "  - valid_with_tolerance: 0 (0.0%)\n  - invalid: 0 (0.0%)\n  - missing: 0 (0.0%)\n")
+    assert severity(parse_overall_summary(log)) == "success"
+
+
+def test_a_timeout_only_run_is_still_clean():
+    """A per-instance timeout is an ordinary outcome, not a fault."""
+    from vnn_comp.scoring import parse_overall_summary, severity
+
+    log = ("Overall Summary for t:\nTotal instances: 2\n"
+           "  - holds:   0\n  - violated: 0\n  - timeout:  2\n  - error:    0\n  - unknown:  0\n")
+    got = parse_overall_summary(log)
+    assert got["witnesses"] == {}  # the scorer prints none without violations
+    assert severity(got) == "success"
+
+
+def test_a_missing_witness_is_not_a_clean_run():
+    from vnn_comp.scoring import parse_overall_summary, severity
+
+    log = ("Overall Summary for t:\nTotal instances: 1\n"
+           "  - holds:   0\n  - violated: 1\n  - timeout:  0\n  - error:    0\n  - unknown:  0\n"
+           "Counterexample Summary:\n  - valid:   0 (0.0%)\n"
+           "  - valid_with_tolerance: 0 (0.0%)\n  - invalid: 0 (0.0%)\n  - missing: 1 (100.0%)\n")
+    assert severity(parse_overall_summary(log)) == "error"
