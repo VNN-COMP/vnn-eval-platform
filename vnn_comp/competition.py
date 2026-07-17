@@ -14,6 +14,7 @@ from comp_eval_platform.core.models.execution import PAUSE_KIND, SHUTDOWN_KIND
 from comp_eval_platform.results import Branding, Landing, Presentation, ResultRecord, Scoreboard
 
 from . import kinds
+from .guides import benchmark_guide, toolkit_guide
 
 
 class VNNCompetition(Competition):
@@ -224,4 +225,5 @@ class VNNCompetition(Competition):
                     "url": "https://arch.repeatability.cps.cit.tum.de",
                 },
             ),
+            guides={"toolkit": toolkit_guide(), "benchmark": benchmark_guide()},
         )
