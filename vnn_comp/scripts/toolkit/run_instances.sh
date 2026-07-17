@@ -20,12 +20,18 @@
 # category is the benchmark name. The tool writes its verdict as the first line of
 # <out>; the rest, when sat, is the counterexample.
 #
-# Params (env, from run_benchmark.sh): task_id benchmark_name script_dir
-# run_networks run_as_root ROOT_URL.
+# Params (env, from run_benchmark.sh): task_id benchmark_name competition_year
+# vnnlib_version script_dir run_networks run_as_root ROOT_URL.
 set -u
 
-bench_dir="/home/ubuntu/benchmarks/${benchmark_name}"
+# Everything runs from /home/ubuntu with repo-relative paths, so the paths recorded in
+# results.csv are the ones the scorer expects: it re-roots them from the 'onnx'/'vnnlib'
+# segment onto its own copy of the benchmark, and reads the version out of them.
+bench_rel="vnncomp${competition_year}_benchmarks/benchmarks/${benchmark_name}/${vnnlib_version}"
+bench_dir="/home/ubuntu/${bench_rel}"
 tool_dir="/home/ubuntu/toolkit/${script_dir}"
+# The scorer asserts the year is the category's first segment (`cat[4] == "_"`).
+category="${competition_year}_${benchmark_name}"
 results="/home/ubuntu/logs/results_${benchmark_name}.csv"
 ce_dir="/home/ubuntu/logs/counterexamples/${benchmark_name}"
 log="/home/ubuntu/logs/run_${benchmark_name}.log"
@@ -52,22 +58,23 @@ else
     export PATH="/home/ubuntu/anaconda3/bin:$PATH"
 fi
 
-cd "$bench_dir" || { echo "[ERROR] benchmark not on node: $bench_dir"; report failure; exit 1; }
+[ -d "$bench_dir" ] || { echo "[ERROR] benchmark not on node: $bench_dir"; report failure; exit 1; }
 [ -x "$tool_dir/run_instance.sh" ] || { echo "[ERROR] tool not installed: $tool_dir"; report failure; exit 1; }
+cd /home/ubuntu || exit 1
 
 # Instance subset; the testing modes mirror the old run_all_categories.sh vocabulary.
 select_instances() {
     case "${run_networks}" in
-        first)     head -n 1 instances.csv ;;
-        different) awk -F, '!seen[$1]++' instances.csv ;;
-        random)    shuf -n 10 instances.csv ;;
-        *)         cat instances.csv ;;
+        first)     head -n 1 "$bench_dir/instances.csv" ;;
+        different) awk -F, '!seen[$1]++' "$bench_dir/instances.csv" ;;
+        random)    shuf -n 10 "$bench_dir/instances.csv" ;;
+        *)         cat "$bench_dir/instances.csv" ;;
     esac
 }
 
 since() { awk "BEGIN{printf \"%.2f\", $(date +%s.%N) - $1}"; }
 record() {  # <prepare_time> <verdict> <runtime>
-    echo "${benchmark_name},${onnx},${vnnlib},$1,$2,$3" >> "$results"
+    echo "${category},${onnx_path},${vnnlib_path},$1,$2,$3" >> "$results"
 }
 
 : > "$results"
@@ -77,6 +84,10 @@ echo "[INFO] running ${benchmark_name} (run_networks=${run_networks})"
 while IFS=, read -r onnx vnnlib tmo || [ -n "$onnx" ]; do
     [ -z "${onnx// /}" ] && continue
     tmo="${tmo:-600}"
+    # instances.csv is benchmark-relative; the tool and the scorer both need the paths
+    # rooted at /home/ubuntu, which is where this runs from.
+    onnx_path="${bench_rel}/${onnx}"
+    vnnlib_path="${bench_rel}/${vnnlib}"
     name="$(basename "$onnx" .onnx)/$(basename "$vnnlib" .vnnlib)"
     out="/tmp/result_${task_id}.txt"
     rm -f "$out"
@@ -85,7 +96,7 @@ while IFS=, read -r onnx vnnlib tmo || [ -n "$onnx" ]; do
     prep_start=$(date +%s.%N)
     prep_rc=0
     timeout 600 $sudo /bin/bash "$tool_dir/prepare_instance.sh" \
-        v1 "${benchmark_name}" "$onnx" "$vnnlib" || prep_rc=$?
+        v1 "${category}" "$onnx_path" "$vnnlib_path" || prep_rc=$?
     prepare_time=$(since "$prep_start")
 
     if [ "$prep_rc" -ne 0 ]; then
@@ -102,7 +113,7 @@ while IFS=, read -r onnx vnnlib tmo || [ -n "$onnx" ]; do
     run_start=$(date +%s.%N)
     rc=0
     timeout "$tmo" $sudo /bin/bash "$tool_dir/run_instance.sh" \
-        v1 "${benchmark_name}" "$onnx" "$vnnlib" "$out" "$tmo" || rc=$?
+        v1 "${category}" "$onnx_path" "$vnnlib_path" "$out" "$tmo" || rc=$?
     runtime=$(since "$run_start")
 
     if [ "$rc" -eq 124 ]; then

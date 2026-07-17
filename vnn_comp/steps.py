@@ -109,6 +109,8 @@ class RunBenchmarkHandler(StepHandler):
         return f"logs/run_{b.name}.log" if b else None
 
     def execute(self):
+        from django.conf import settings
+
         if self.node_ip is None:
             self.task.step_failed(check_status=False)
             return
@@ -118,6 +120,7 @@ class RunBenchmarkHandler(StepHandler):
             "benchmark_ip": self.node_ip,
             "task_id": str(self.task.id),
             "benchmark_name": b.name if b else "",
+            "competition_year": settings.COMPETITION_YEAR,
             "script_dir": (tool.script_dir if tool else ".") or ".",
             "run_networks": self.step.payload.get("run_networks", "all"),
             "vnnlib_version": self.step.payload.get("version", "1.0"),
@@ -182,14 +185,18 @@ class RunBenchmarkHandler(StepHandler):
         """This benchmark's cases, keyed by name, so results link to their Instance row.
         Recorded from the copy that actually ran, which also backfills a benchmark
         generated before instances were recorded at all."""
+        from django.conf import settings
+
         from comp_eval_platform.compute.shell import node_exec
         from comp_eval_platform.core.models import Instance
 
         from .instances import ensure_instances
 
         if self.node_ip is not None:
-            csv_text = node_exec(
-                self.node_ip, f"cat /home/ubuntu/benchmarks/{benchmark.name}/instances.csv 2>/dev/null")
+            version = self.step.payload.get("version", "1.0")
+            path = (f"/home/ubuntu/vnncomp{settings.COMPETITION_YEAR}_benchmarks/benchmarks"
+                    f"/{benchmark.name}/{version}/instances.csv")
+            csv_text = node_exec(self.node_ip, f"cat {path} 2>/dev/null")
             if csv_text.strip():
                 return ensure_instances(benchmark, csv_text)
         return {i.name: i for i in Instance.objects.filter(benchmark=benchmark)}

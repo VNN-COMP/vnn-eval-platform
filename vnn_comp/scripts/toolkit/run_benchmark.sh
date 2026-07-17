@@ -49,10 +49,13 @@ src="${repo_dir}/benchmarks/${benchmark_name}/${vnnlib_version}"
 [ -d "$src" ] || fail "benchmark ${benchmark_name} (vnnlib ${vnnlib_version}) not found at ${src}; has it been generated and exported?"
 [ -f "$src/instances.csv" ] || fail "no instances.csv in ${src}"
 
-# Ship the benchmark tree and the loop to the node.
-ssh $ssh_opts "$node" "mkdir -p /home/ubuntu/benchmarks /home/ubuntu/logs && rm -rf /home/ubuntu/benchmarks/${benchmark_name}" \
+# Ship the benchmark tree and the loop to the node. It goes where the official scorer
+# looks for it (Settings.BENCHMARK_REPOS resolves to ~/vnncomp<year>_benchmarks, and the
+# layout below is the one it expects), so the run and its validation read the same files.
+dest="/home/ubuntu/vnncomp${competition_year}_benchmarks/benchmarks/${benchmark_name}"
+ssh $ssh_opts "$node" "mkdir -p ${dest} /home/ubuntu/logs && rm -rf ${dest}/${vnnlib_version}" \
     || fail "node ${benchmark_ip} unreachable"
-scp -r $ssh_opts "$src" "${node}:/home/ubuntu/benchmarks/${benchmark_name}" \
+scp -r $ssh_opts "$src" "${node}:${dest}/${vnnlib_version}" \
     || fail "copying ${benchmark_name} to the node failed"
 scp $ssh_opts "${script_here}/run_instances.sh" "${node}:/home/ubuntu/run_instances.sh" \
     || fail "copying run_instances.sh to the node failed"
@@ -62,7 +65,7 @@ ssh $ssh_opts "$node" \
      tmux kill-session -t measurements 2>/dev/null
      rm -f /home/ubuntu/measurement.pgid
      tmux new-session -d -s measurements \
-        'ROOT_URL=${ROOT_URL} task_id=${task_id} benchmark_name=${benchmark_name} script_dir=${script_dir} run_networks=${run_networks} run_as_root=${run_as_root} /bin/bash /home/ubuntu/run_instances.sh'" \
+        'ROOT_URL=${ROOT_URL} task_id=${task_id} benchmark_name=${benchmark_name} competition_year=${competition_year} vnnlib_version=${vnnlib_version} script_dir=${script_dir} run_networks=${run_networks} run_as_root=${run_as_root} /bin/bash /home/ubuntu/run_instances.sh'" \
     || fail "starting the run on the node failed"
 
 echo "[INFO] ${benchmark_name} started on ${benchmark_ip}; the node reports back when it finishes"
