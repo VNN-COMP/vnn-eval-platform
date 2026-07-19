@@ -38,13 +38,17 @@ class InstallHandler(StepHandler):
             self.task.step_failed(check_status=False)
             return
         tool = self.task.tool
-        _ping("toolkit", "install_tool.sh", {
+        # Generic install (clone tool + run its install_tool.sh) is a core script; the
+        # tool is cloned to /home/ubuntu/toolkit, where the run/check scripts look for it.
+        _ping("node", "install_tool.sh", {
             "benchmark_ip": ip,
             "task_id": str(self.task.id),
             "repository": tool.repository,
             "hash": tool.hash or "",
             "script_dir": tool.script_dir or ".",
             "run_as_root": str(self.step.run_as_root).lower(),
+            "version": "v1",
+            "tool_dir": "toolkit",
         })
 
     def retry_until_success(self) -> bool:
@@ -171,7 +175,8 @@ class RunBenchmarkHandler(StepHandler):
         b = self._benchmark()
         if b is None:
             return
-        artifacts = self._fetch_artifacts()
+        # Result collection (fetch results.csv → temp dir) is generic core behavior.
+        artifacts = self.collect_results(f"/home/ubuntu/logs/results_{b.name}.csv")
         if artifacts is None:
             return
         try:
@@ -200,30 +205,6 @@ class RunBenchmarkHandler(StepHandler):
             if csv_text.strip():
                 return ensure_instances(benchmark, csv_text)
         return {i.name: i for i in Instance.objects.filter(benchmark=benchmark)}
-
-    def _fetch_artifacts(self):
-        """Pull the run's results.csv off the node into a temp dir for parse_results.
-        Read here because the node is torn down before the task ends. Returns the dir,
-        or None when the run produced nothing."""
-        import os
-        import tempfile
-
-        from comp_eval_platform.compute.shell import node_exec
-
-        b = self._benchmark()
-        if self.node_ip is None or b is None:
-            return None
-        csv_text = node_exec(self.node_ip, f"cat /home/ubuntu/logs/results_{b.name}.csv 2>/dev/null")
-        if not csv_text.strip():
-            return None
-        # Keep the node's file verbatim: the submission page shows it as-is, and the
-        # node it lives on is torn down at the end of the task.
-        self.step.payload = {**(self.step.payload or {}), "results_csv": csv_text}
-        self.step.save(update_fields=["payload"])
-        d = tempfile.mkdtemp(prefix=f"results_{self.task.id}_")
-        with open(os.path.join(d, "results.csv"), "w") as fh:
-            fh.write(csv_text)
-        return d
 
 
 @register_step_handler
