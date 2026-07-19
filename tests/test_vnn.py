@@ -432,3 +432,103 @@ def test_a_missing_witness_is_not_a_clean_run():
            "Counterexample Summary:\n  - valid:   0 (0.0%)\n"
            "  - valid_with_tolerance: 0 (0.0%)\n  - invalid: 0 (0.0%)\n  - missing: 1 (100.0%)\n")
     assert severity(parse_overall_summary(log)) == "error"
+
+
+def test_count_verdicts_buckets_raw_results():
+    """Infra failures are surfaced as errors (submission-health), matching the frontend."""
+    from vnn_comp.scoring import count_verdicts
+
+    assert count_verdicts([]) is None
+    assert count_verdicts([
+        "unsat", "holds", "sat", "violated", "unknown", "run_instance_timeout",
+        "timeout(200)", "prepare_instance_error_1", "no_result_in_file", "",
+    ]) == {"holds": 2, "violated": 2, "unknown": 1, "timeout": 2, "error": 3}
+
+
+def test_reconcile_replaces_a_dropped_all_unknown_category():
+    """process_results.py drops an all-unknown category, zeroing its summary; the stored
+    Result rows are the only place those verdicts survive, so they win — the cifar100 bug."""
+    from vnn_comp.scoring import parse_overall_summary, reconcile_with_results, severity
+
+    dropped = parse_overall_summary(
+        "Overall Summary for t:\nTotal instances: 0\n"
+        "  - holds:   0\n  - violated: 0\n  - timeout:  0\n  - error:    0\n  - unknown:  0\n")
+    db = {"holds": 0, "violated": 0, "timeout": 0, "error": 0, "unknown": 3}
+    got = reconcile_with_results(dropped, db)
+    assert got["verdicts"]["unknown"] == 3
+    assert got["instances"] == 3
+    assert severity(got) == "success"  # all-unknown is a valid outcome
+
+
+def test_reconcile_keeps_a_nondegenerate_scorer_summary():
+    """A summary with real verdicts wins over the raw rows: the scorer reconciles forced
+    per-instance timeouts, keeping violated equal to the witness breakdown."""
+    from vnn_comp.scoring import parse_overall_summary, reconcile_with_results
+
+    summary = parse_overall_summary(
+        "Overall Summary for t:\nTotal instances: 4\n"
+        "  - holds:   0\n  - violated: 2\n  - timeout:  2\n  - error:    0\n  - unknown:  0\n"
+        "Counterexample Summary:\n  - valid:   2 (100.0%)\n"
+        "  - valid_with_tolerance: 0\n  - invalid: 0\n  - missing: 0\n")
+    # results.csv kept the tool's raw verdicts (2 sat finished a hair late -> timeout).
+    db = {"holds": 0, "violated": 4, "timeout": 0, "error": 0, "unknown": 0}
+    got = reconcile_with_results(summary, db)
+    assert got["verdicts"]["violated"] == 2
+    assert got["verdicts"]["timeout"] == 2
+
+
+def test_reconcile_surfaces_errors_the_scorer_hid_in_unknown():
+    """An infra failure the scorer folds into unknown must read as an error (red), moved
+    across without changing the total."""
+    from vnn_comp.scoring import parse_overall_summary, reconcile_with_results, severity
+
+    summary = parse_overall_summary(
+        "Overall Summary for t:\nTotal instances: 3\n"
+        "  - holds:   1\n  - violated: 0\n  - timeout:  0\n  - error:    0\n  - unknown:  2\n")
+    db = {"holds": 1, "violated": 0, "timeout": 0, "error": 2, "unknown": 0}
+    got = reconcile_with_results(summary, db)
+    assert got["verdicts"]["error"] == 2
+    assert got["verdicts"]["unknown"] == 0
+    assert got["verdicts"]["holds"] == 1
+    assert got["instances"] == 3
+    assert severity(got) == "error"
+
+
+def test_build_summary_is_none_without_a_scorer_report():
+    """No scorer summary -> nothing frozen, so the frontend keeps its results.csv fallback
+    (which can flag verdicts but not witness validity)."""
+    from vnn_comp.scoring import build_summary
+
+    db = {"holds": 0, "violated": 0, "timeout": 0, "error": 0, "unknown": 3}
+    assert build_summary("[ERROR] skipping validation", db) == (None, None)
+
+
+def test_check_results_freezes_the_reconciled_tally():
+    """End to end: an all-unknown run whose scorer dropped the category still freezes the
+    real unknown count onto the step (read back by the details page)."""
+    from comp_eval_platform.core.models import (
+        Benchmark, Category, Result, Task, Tool,
+    )
+    from comp_eval_platform.core.models.execution import StepStatus, TaskStep
+
+    from vnn_comp import kinds
+    from vnn_comp.steps import freeze_check_summary
+
+    cat = Category.objects.create(name="default")
+    u = _user()
+    tool = Tool.objects.create(owner=u, category=cat, name="t", repository="r")
+    b = Benchmark.objects.create(owner=u, category=cat, name="acasxu")
+    task = Task.objects.create(owner=u, tool=tool)
+    for _ in range(3):
+        Result.objects.create(task=task, tool=tool, benchmark=b, category=cat, result="unknown", time=5.0)
+
+    step = TaskStep.objects.create(
+        task=task, kind=kinds.CHECK_RESULTS, order=1, status=StepStatus.DONE,
+        payload={"benchmark_id": b.id})
+    step.set_log("Overall Summary for t:\nTotal instances: 0\n"
+                 "  - holds:   0\n  - violated: 0\n  - timeout:  0\n  - error:    0\n  - unknown:  0\n")
+
+    assert freeze_check_summary(step) is True
+    step.refresh_from_db()
+    assert step.payload["summary"]["verdicts"]["unknown"] == 3
+    assert step.payload["severity"] == "success"

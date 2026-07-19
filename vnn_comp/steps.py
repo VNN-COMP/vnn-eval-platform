@@ -243,17 +243,11 @@ class CheckResultsHandler(StepHandler):
         })
 
     def on_marked_done(self):
-        """Freeze the scorer's summary onto the step. Its log is already stored (the
-        node POSTs it with the callback), and it is the only place that says whether
-        each counterexample actually held up."""
-        from .scoring import parse_overall_summary, severity
-
-        summary = parse_overall_summary(self.step.logs or "")
-        if not summary:
-            return
-        self.step.payload = {**(self.step.payload or {}),
-                             "summary": summary, "severity": severity(summary)}
-        self.step.save(update_fields=["payload"])
+        """Freeze the scorer's summary onto the step. Its log is already stored (the node
+        POSTs it with the callback), and it is the only place that says whether each
+        counterexample actually held up — but the scorer drops an all-unknown/all-timeout
+        category, so the verdict tally is reconciled against the stored Result rows."""
+        freeze_check_summary(self.step)
 
     def is_instance_loss_valid_end(self) -> bool:
         return True  # a lost node during validation shouldn't fail the whole task
@@ -263,6 +257,36 @@ def _benchmark_of(step):
     from comp_eval_platform.core.models import Benchmark
 
     return Benchmark.objects.filter(id=step.payload.get("benchmark_id")).first()
+
+
+def compute_check_summary(step):
+    """A validation step's reconciled ``(summary, severity)``: the scorer's report folded
+    together with the authoritative per-instance Result rows (see scoring.reconcile_with_results).
+    Pure — no save; ``(None, None)`` when the scorer produced no summary at all."""
+    from comp_eval_platform.core.models import Result
+
+    from .scoring import build_summary, count_verdicts
+
+    benchmark = _benchmark_of(step)
+    verdict_counts = None
+    if benchmark is not None:
+        verdict_counts = count_verdicts(
+            Result.objects.filter(task=step.task, benchmark=benchmark).values_list("result", flat=True)
+        )
+    return build_summary(step.logs or "", verdict_counts)
+
+
+def freeze_check_summary(step) -> bool:
+    """Persist a validation step's reconciled summary + severity onto its payload. Reused by
+    CheckResultsHandler.on_marked_done and the reconcile_summaries command (which re-freezes
+    runs finished before the reconciliation existed). Returns whether a summary was stored —
+    False when the scorer produced none, leaving the results.csv fallback."""
+    summary, sev = compute_check_summary(step)
+    if summary is None:
+        return False
+    step.payload = {**(step.payload or {}), "summary": summary, "severity": sev}
+    step.save(update_fields=["payload"])
+    return True
 
 
 def _repo_params(kind: str) -> dict:
