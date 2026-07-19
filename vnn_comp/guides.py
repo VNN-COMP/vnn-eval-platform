@@ -35,7 +35,7 @@ def toolkit_guide() -> Guide:
               "at submissions that already ran, use the submissions page.",
         pipeline=[
             {
-                "title": "Create submission",
+                "title": "Create Submission",
                 "details": [
                     "The submission is recorded with what you chose on the form: the repository "
                     "and commit, the benchmarks to run, and which stages run as root. Nothing "
@@ -46,7 +46,7 @@ def toolkit_guide() -> Guide:
                 ],
             },
             {
-                "title": "Assign worker",
+                "title": "Assign Worker",
                 "details": [
                     "The task waits for a worker and attaches it. Depending on how the "
                     "deployment is configured that is either an AWS instance created from the "
@@ -58,7 +58,7 @@ def toolkit_guide() -> Guide:
                 ],
             },
             {
-                "title": "Install toolkit",
+                "title": "Install Toolkit",
                 "details": [
                     "Your repository is cloned at the submitted commit and the scripts directory "
                     "you named must contain `install_tool.sh`, `prepare_instance.sh` and "
@@ -74,7 +74,7 @@ def toolkit_guide() -> Guide:
                 ],
             },
             {
-                "title": "Post-installation script",
+                "title": "Post-Installation Script",
                 "details": [
                     "The script from the “Post installation script” field runs on the worker. "
                     "This is the place for anything that depends on the machine the tool was just "
@@ -88,7 +88,7 @@ def toolkit_guide() -> Guide:
                 ],
             },
             {
-                "title": "Run benchmark",
+                "title": "Run Benchmark",
                 "details": [
                     "One step per selected benchmark, so a benchmark that fails does not take the "
                     "others with it. For each instance the worker runs `prepare_instance.sh v1 "
@@ -104,7 +104,7 @@ def toolkit_guide() -> Guide:
                 ],
             },
             {
-                "title": "Validate counterexamples",
+                "title": "Validate Counterexamples",
                 "details": [
                     "The official scorer re-checks every counterexample the run produced, "
                     "confirming the witness really does violate the property it claims to. This is "
@@ -116,7 +116,7 @@ def toolkit_guide() -> Guide:
                 ],
             },
             {
-                "title": "Export results",
+                "title": "Export Results",
                 "details": [
                     "Only for submissions that enabled export. The run's `results.csv` and its "
                     "counterexamples are pushed to the competition's results repository, and the "
@@ -135,7 +135,7 @@ def toolkit_guide() -> Guide:
         ],
         sections=[
             {
-                "heading": "What your repository must contain",
+                "heading": "What Your Repository Must Contain",
                 "blocks": [
                     {"type": "text", "text":
                         f"The [toolkit skeleton repository]({TOOL_SKELETON}) "
@@ -180,7 +180,7 @@ def toolkit_guide() -> Guide:
                 ],
             },
             {
-                "heading": "Choosing a worker",
+                "heading": "Choosing a Worker",
                 "blocks": [
                     {"type": "text", "text":
                         "On AWS deployments the form asks for an AMI and an instance type, and the "
@@ -210,7 +210,7 @@ def benchmark_guide() -> Guide:
               "or to look at proposals that already ran, use the submissions page.",
         pipeline=[
             {
-                "title": "Create submission",
+                "title": "Create Submission",
                 "details": [
                     "The proposal is recorded with its repository and commit, and the layout you "
                     "declared on the form: where the generator lives, and where it writes its "
@@ -218,7 +218,7 @@ def benchmark_guide() -> Guide:
                 ],
             },
             {
-                "title": "Assign worker",
+                "title": "Assign Worker",
                 "details": [
                     "The task waits for a worker and attaches it — an AWS instance or a Docker "
                     "container, depending on the deployment. This is the queueing stage you see "
@@ -226,7 +226,7 @@ def benchmark_guide() -> Guide:
                 ],
             },
             {
-                "title": "Generate instances",
+                "title": "Generate Instances",
                 "details": [
                     "Your repository is cloned at the submitted commit. If it has an `install.sh` "
                     "at its root, that runs first, so the generator can install what it needs; the "
@@ -249,7 +249,7 @@ def benchmark_guide() -> Guide:
                 ],
             },
             {
-                "title": "Export to benchmarks repo",
+                "title": "Export to Benchmarks Repo",
                 "details": [
                     "The generated files, plus a README naming the source repository and commit, "
                     "are pushed to the competition's benchmarks repository — which is where "
@@ -270,7 +270,7 @@ def benchmark_guide() -> Guide:
         ],
         sections=[
             {
-                "heading": "What your repository must contain",
+                "heading": "What Your Repository Must Contain",
                 "blocks": [
                     {"type": "text", "text":
                         f"The [benchmark skeleton repository]({BENCHMARK_SKELETON}) "
@@ -294,7 +294,7 @@ def benchmark_guide() -> Guide:
                 ],
             },
             {
-                "heading": "After a successful run",
+                "heading": "After a Successful Run",
                 "blocks": [
                     {"type": "text", "text":
                         "Once the automated checks pass, announce your proposal in the "
