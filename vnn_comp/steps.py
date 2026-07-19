@@ -134,8 +134,11 @@ class RunBenchmarkHandler(StepHandler):
         _ping("toolkit", "run_benchmark.sh", params)
 
     def while_active(self):
-        """Stream the node log, then enforce the per-benchmark wall-clock cap."""
+        """Stream the node log + partial results, then enforce the wall-clock cap."""
         super().while_active()
+        b = self._benchmark()
+        if b is not None:
+            self.refresh_run_progress(f"/home/ubuntu/logs/results_{b.name}.csv", b)
         from comp_eval_platform.core.models import RuntimeSettings
 
         s = RuntimeSettings.get()
