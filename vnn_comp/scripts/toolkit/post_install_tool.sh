@@ -63,10 +63,15 @@ else
     export PATH=\"/home/ubuntu/anaconda3/bin:\$PATH\"
 fi
 
-log_step 'RUNNING post_install_tool.sh:'
-if cd ${remote_dir} \
-    && chmod +x post_install_tool.sh \
-    && ${sudo} /bin/bash post_install_tool.sh; then
+log_box_open 'run post_install_tool.sh'
+if cd ${remote_dir} && chmod +x post_install_tool.sh; then
+    ${sudo} /bin/bash post_install_tool.sh 2>&1 | log_wall
+    post_rc=\${PIPESTATUS[0]}
+else
+    post_rc=1
+fi
+log_box_close
+if [ \"\${post_rc}\" -eq 0 ]; then
     log_stage 'End — post-installation done'
     report success
 else

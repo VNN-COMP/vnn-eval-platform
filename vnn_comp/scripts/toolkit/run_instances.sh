@@ -60,7 +60,7 @@ else
     export PATH="/home/ubuntu/anaconda3/bin:$PATH"
 fi
 
-log_stage "Start — running ${benchmark_name} (run_networks=${run_networks})"
+log_superstage "Start — running ${benchmark_name} (run_networks=${run_networks})"
 [ -d "$bench_dir" ] || { log_info "ERROR: benchmark not on node: $bench_dir"; report failure; exit 1; }
 [ -x "$tool_dir/run_instance.sh" ] || { log_info "ERROR: tool not installed: $tool_dir"; report failure; exit 1; }
 cd /home/ubuntu || exit 1
@@ -98,28 +98,30 @@ while IFS=, read -r onnx vnnlib tmo || [ -n "$onnx" ]; do
     count=$((count + 1))
     log_stage "Running instance ${count}/${total}: ${name}"
 
-    log_step "RUNNING prepare_instance.sh (timeout 600s):"
+    log_box_open "run prepare_instance.sh (timeout 600s)"
     prep_start=$(date +%s.%N)
-    prep_rc=0
     timeout 600 $sudo /bin/bash "$tool_dir/prepare_instance.sh" \
-        v1 "${category}" "$onnx_path" "$vnnlib_path" || prep_rc=$?
+        v1 "${category}" "$onnx_path" "$vnnlib_path" 2>&1 | log_wall
+    prep_rc=${PIPESTATUS[0]}
     prepare_time=$(since "$prep_start")
 
     if [ "$prep_rc" -ne 0 ]; then
         if [ "$prep_rc" -eq 124 ]; then verdict=prepare_instance_timeout
         else verdict="prepare_instance_error_${prep_rc}"; fi
-        log_info "prepare_instance.sh -> ${verdict} in ${prepare_time}s; a failed prepare skips the rest of this category"
+        log_box_note "prepare_instance.sh -> ${verdict} in ${prepare_time}s; a failed prepare skips the rest of this category"
+        log_box_close
         # The rules make a failed prepare skip the category, so this is the last row.
         record "$prepare_time" "$verdict" 0
         break
     fi
-    log_info "prepare_instance.sh done in ${prepare_time}s"
+    log_box_note "prepare_instance.sh done in ${prepare_time}s"
+    log_box_close
 
-    log_step "RUNNING run_instance.sh (timeout ${tmo}s):"
+    log_box_open "run run_instance.sh (timeout ${tmo}s)"
     run_start=$(date +%s.%N)
-    rc=0
     timeout "$tmo" $sudo /bin/bash "$tool_dir/run_instance.sh" \
-        v1 "${category}" "$onnx_path" "$vnnlib_path" "$out" "$tmo" || rc=$?
+        v1 "${category}" "$onnx_path" "$vnnlib_path" "$out" "$tmo" 2>&1 | log_wall
+    rc=${PIPESTATUS[0]}
     runtime=$(since "$run_start")
 
     if [ "$rc" -eq 124 ]; then
@@ -133,7 +135,8 @@ while IFS=, read -r onnx vnnlib tmo || [ -n "$onnx" ]; do
         verdict="${verdict:-no_result_in_file}"
     fi
 
-    log_info "run_instance.sh -> ${verdict} in ${runtime}s"
+    log_box_note "run_instance.sh -> ${verdict} in ${runtime}s"
+    log_box_close
     record "$prepare_time" "$verdict" "$runtime"
     # Keep the witness for the scorer to validate; it is the whole point of a sat.
     if [ "$verdict" = "sat" ] || [ "$verdict" = "violated" ]; then
@@ -143,5 +146,5 @@ done <<EOF
 $instances
 EOF
 
-log_stage "End — finished ${count} instance(s); results in ${results}"
+log_superstage "End — finished ${count} instance(s); results in ${results}"
 report success
