@@ -166,7 +166,7 @@ class RunBenchmarkHandler(StepHandler):
 
     def abort_benchmark(self):
         self._kill_run()
-        self.task.step_succeeded(check_status=False)
+        self.task.step_aborted()
 
     def on_marked_done(self):
         """Fetch the node's results.csv, parse and persist normalized Result rows."""
