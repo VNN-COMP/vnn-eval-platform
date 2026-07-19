@@ -237,22 +237,17 @@ def test_parse_results_reads_the_official_csv_layout(tmp_path):
     assert records[0].extra == {"prepare_time": 0.30}
 
 
-def test_guides_only_link_assets_the_plugin_actually_ships():
-    """The guides offer the skeleton repos as downloads, served out of the plugin's own
-    assets. A renamed or dropped file would leave a dead link on the info page and
-    nothing else would notice, the copy being prose."""
-    import re
-
+def test_guides_link_the_github_skeleton_repos():
+    """The guides point submitters at the example repos on GitHub. A dead or wrong link
+    would leave the info page pointing nowhere and nothing else would notice, the copy
+    being prose."""
     from comp_eval_platform.competitions import get_competition
 
-    comp = get_competition()
-    guides = comp.presentation().guides
-    prose = repr([g.sections for g in guides.values()])
-    linked = re.findall(r"/api/competition/assets/([\w.-]+)", prose)
-
-    assert linked, "expected the guides to link the skeleton repos"
-    for name in linked:
-        assert comp.asset_path(name), f"guide links {name}, which the plugin does not ship"
+    prose = repr([g.sections for g in get_competition().presentation().guides.values()])
+    assert "https://github.com/VNN-COMP/example_toolkit" in prose
+    assert "https://github.com/VNN-COMP/example_benchmark" in prose
+    # The skeletons live on GitHub now, not as shipped zip assets.
+    assert "/api/competition/assets/" not in prose
 
 
 def test_guides_cover_both_submission_pages():

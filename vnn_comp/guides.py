@@ -10,7 +10,8 @@ than the strip, which shows the line every submission takes.
 """
 from comp_eval_platform.results import Guide
 
-SKELETON = "/api/competition/assets"  # the plugin's own assets, served by the core
+TOOL_SKELETON = "https://github.com/VNN-COMP/example_toolkit"
+BENCHMARK_SKELETON = "https://github.com/VNN-COMP/example_benchmark"
 RULES = "https://github.com/VNN-COMP/vnncomp2026/blob/main/rules.md"
 
 _CE_1_0 = """sat
@@ -137,7 +138,7 @@ def toolkit_guide() -> Guide:
                 "heading": "What your repository must contain",
                 "blocks": [
                     {"type": "text", "text":
-                        f"The [toolkit skeleton repository]({SKELETON}/vnncomp-toolkit-skeleton.zip) "
+                        f"The [toolkit skeleton repository]({TOOL_SKELETON}) "
                         "is the minimal layout the submission system can validate. It has the "
                         "required scripts with their argument parsing already in place and `TODO`s "
                         "where your tool-specific logic goes. Its scripts sit at the repository "
@@ -272,7 +273,7 @@ def benchmark_guide() -> Guide:
                 "heading": "What your repository must contain",
                 "blocks": [
                     {"type": "text", "text":
-                        f"The [benchmark skeleton repository]({SKELETON}/vnncomp-benchmark-skeleton.zip) "
+                        f"The [benchmark skeleton repository]({BENCHMARK_SKELETON}) "
                         "is the minimal layout the submission system can validate. It has "
                         "`generate_properties.py` with the seed argument already parsed and `TODO`s "
                         "where your instance-generation logic goes, plus the output directories. "
