@@ -39,6 +39,7 @@ log="/home/ubuntu/logs/run_${benchmark_name}.log"
 
 mkdir -p /home/ubuntu/logs "$ce_dir"
 exec > >(tee "$log") 2>&1
+. /home/ubuntu/comp_log.sh
 # tmux runs this pane in its own session, so this bash is the process-group leader
 # (PID == PGID) and the orchestrator's per-benchmark cap can group-kill the whole
 # run tree (wrapper scripts + verifier) in one shot.
@@ -59,8 +60,9 @@ else
     export PATH="/home/ubuntu/anaconda3/bin:$PATH"
 fi
 
-[ -d "$bench_dir" ] || { echo "[ERROR] benchmark not on node: $bench_dir"; report failure; exit 1; }
-[ -x "$tool_dir/run_instance.sh" ] || { echo "[ERROR] tool not installed: $tool_dir"; report failure; exit 1; }
+log_stage "Start — running ${benchmark_name} (run_networks=${run_networks})"
+[ -d "$bench_dir" ] || { log_info "ERROR: benchmark not on node: $bench_dir"; report failure; exit 1; }
+[ -x "$tool_dir/run_instance.sh" ] || { log_info "ERROR: tool not installed: $tool_dir"; report failure; exit 1; }
 cd /home/ubuntu || exit 1
 
 # Instance subset; the testing modes mirror the old run_all_categories.sh vocabulary.
@@ -79,8 +81,9 @@ record() {  # <prepare_time> <verdict> <runtime>
 }
 
 : > "$results"
+instances="$(select_instances)"
+total=$(printf '%s\n' "$instances" | grep -c '[^[:space:]]')
 count=0
-echo "[INFO] running ${benchmark_name} (run_networks=${run_networks})"
 
 while IFS=, read -r onnx vnnlib tmo || [ -n "$onnx" ]; do
     [ -z "${onnx// /}" ] && continue
@@ -92,8 +95,10 @@ while IFS=, read -r onnx vnnlib tmo || [ -n "$onnx" ]; do
     name="$(basename "$onnx" .onnx)/$(basename "$vnnlib" .vnnlib)"
     out="/tmp/result_${task_id}.txt"
     rm -f "$out"
+    count=$((count + 1))
+    log_stage "Running instance ${count}/${total}: ${name}"
 
-    echo "[INFO] preparing ${name}"
+    log_step "RUNNING prepare_instance.sh (timeout 600s):"
     prep_start=$(date +%s.%N)
     prep_rc=0
     timeout 600 $sudo /bin/bash "$tool_dir/prepare_instance.sh" \
@@ -103,14 +108,14 @@ while IFS=, read -r onnx vnnlib tmo || [ -n "$onnx" ]; do
     if [ "$prep_rc" -ne 0 ]; then
         if [ "$prep_rc" -eq 124 ]; then verdict=prepare_instance_timeout
         else verdict="prepare_instance_error_${prep_rc}"; fi
+        log_info "prepare_instance.sh -> ${verdict} in ${prepare_time}s; a failed prepare skips the rest of this category"
         # The rules make a failed prepare skip the category, so this is the last row.
-        echo "[WARN] ${name} -> ${verdict}; skipping the rest of this category"
         record "$prepare_time" "$verdict" 0
-        count=$((count + 1))
         break
     fi
+    log_info "prepare_instance.sh done in ${prepare_time}s"
 
-    echo "[INFO] running ${name} (timeout ${tmo}s)"
+    log_step "RUNNING run_instance.sh (timeout ${tmo}s):"
     run_start=$(date +%s.%N)
     rc=0
     timeout "$tmo" $sudo /bin/bash "$tool_dir/run_instance.sh" \
@@ -128,16 +133,15 @@ while IFS=, read -r onnx vnnlib tmo || [ -n "$onnx" ]; do
         verdict="${verdict:-no_result_in_file}"
     fi
 
-    echo "[INFO] ${name} -> ${verdict} in ${runtime}s"
+    log_info "run_instance.sh -> ${verdict} in ${runtime}s"
     record "$prepare_time" "$verdict" "$runtime"
     # Keep the witness for the scorer to validate; it is the whole point of a sat.
     if [ "$verdict" = "sat" ] || [ "$verdict" = "violated" ]; then
         [ -s "$out" ] && cp "$out" "${ce_dir}/$(basename "$onnx" .onnx)_$(basename "$vnnlib" .vnnlib).counterexample"
     fi
-    count=$((count + 1))
 done <<EOF
-$(select_instances)
+$instances
 EOF
 
-echo "[INFO] finished ${count} instance(s); results in ${results}"
+log_stage "End — finished ${count} instance(s); results in ${results}"
 report success

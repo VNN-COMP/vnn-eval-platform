@@ -59,13 +59,15 @@ scp -r $ssh_opts "$src" "${node}:${dest}/${vnnlib_version}" \
     || fail "copying ${benchmark_name} to the node failed"
 scp $ssh_opts "${script_here}/run_instances.sh" "${node}:/home/ubuntu/run_instances.sh" \
     || fail "copying run_instances.sh to the node failed"
+scp $ssh_opts "${COMP_LOG_LIB}" "${node}:/home/ubuntu/comp_log.sh" \
+    || fail "copying the logging helpers to the node failed"
 
 ssh $ssh_opts "$node" \
     "chmod +x /home/ubuntu/run_instances.sh
      tmux kill-session -t measurements 2>/dev/null
      rm -f /home/ubuntu/measurement.pgid
      tmux new-session -d -s measurements \
-        'ROOT_URL=${ROOT_URL} task_id=${task_id} benchmark_name=${benchmark_name} competition_year=${competition_year} vnnlib_version=${vnnlib_version} script_dir=${script_dir} run_networks=${run_networks} run_as_root=${run_as_root} /bin/bash /home/ubuntu/run_instances.sh'" \
+        'COMP_LABEL=\"${COMP_LABEL:-VNN-COMP}\" ROOT_URL=${ROOT_URL} task_id=${task_id} benchmark_name=${benchmark_name} competition_year=${competition_year} vnnlib_version=${vnnlib_version} script_dir=${script_dir} run_networks=${run_networks} run_as_root=${run_as_root} /bin/bash /home/ubuntu/run_instances.sh'" \
     || fail "starting the run on the node failed"
 
 echo "[INFO] ${benchmark_name} started on ${benchmark_ip}; the node reports back when it finishes"
