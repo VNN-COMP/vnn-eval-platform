@@ -1,51 +1,35 @@
 # vnn-comp
 
-The **VNN-COMP** variant of [comp-eval-platform](../comp-eval-platform). A thin
-repo: the `vnn_comp` plugin app + deployment config, depending on the core engine.
+The **VNN-COMP** variant of [comp-eval-platform](../comp-eval-platform): the `vnn_comp` plugin
+app plus its deploy config, depending on the core engine. All the heavy lifting lives in core;
+this repo is the VNN-specific seams, step handlers, and node scripts.
 
-The entire variant is:
-- `vnn_comp/competition.py` — the six seams (submission spec, `build_steps`,
-  `script_root`, `parse_results`, `score`, `presentation`).
-- `vnn_comp/steps.py` — the VNN step handlers (create / install / run_benchmark /
-  export / pause). Core provides `assign` and `shutdown`.
-- `vnn_comp/scripts/` — the node scripts (install_tool.sh, run_benchmark.sh, …).
-- `deploy/` — project settings (`ACTIVE_COMPETITION="vnn"`, `INSTALLED_APPS +=
-  ["vnn_comp"]`) + `manage.py`.
+## Requirements
 
-No core changes: adding a competition is a new package like this one.
+- Docker + Docker Compose (Docker Desktop on macOS/Windows). The backend mounts the host Docker
+  socket to run worker containers.
+- Git.
 
-## Run the stack (Postgres + backend)
+## Getting started
+
+Clone this repo and the core engine **side by side** under the same parent directory (the compose
+file mounts `../comp-eval-platform`):
 
 ```bash
-docker compose up          # backend on http://localhost:8001
+git clone <core-repo>   comp-eval-platform
+git clone <this-repo>   vnn-comp-new
+cd vnn-comp-new && docker compose up --build
 ```
 
-The backend installs the core engine (`../comp-eval-platform`) and this plugin,
-migrates, seeds settings, and serves. Admin at `/admin/`, API under `/api/`.
-Configure via env (see `.env.example`).
+- Frontend: <http://localhost:5173>
+- Public URL (optional): `docker compose logs cloudflared | grep trycloudflare`
 
-For `EXECUTION_BACKEND=local_docker`, uncomment the docker-socket mount in
-`docker-compose.yml` and vendor the node scripts into `vnn_comp/scripts/` first.
+The backend installs core + this plugin, migrates, seeds settings, and serves. The **first
+account you sign up becomes the admin**; later signups start disabled until an admin enables them.
 
-## Benchmark storage
-
-Generated benchmarks are committed to a git repo. By default this is a **local**
-repo under `DATA_DIR` (persistent volume) on the deploy host — no external repo
-or deploy key needed. Set `BENCHMARKS_PUSH_REPO` (+ `BENCHMARKS_DEPLOY_KEY`) to
-push to a remote instead. The export runs backend-side, so the backend host
-needs `git`, `git-lfs`, and `openssh-client`.
-
-## Without Docker
+## Tests
 
 ```bash
-pip install -e ../comp-eval-platform -e .
-python deploy/manage.py migrate && python deploy/manage.py init_settings
-DJANGO_SETTINGS_MODULE=deploy.settings python deploy/manage.py runserver
-```
-
-## Test
-
-```bash
-docker run --rm -v "<core>:/core" -v "$PWD:/vnn" -w /vnn python:3.11-slim \
+docker run --rm -v "../comp-eval-platform:/core" -v "$PWD:/vnn" -w /vnn python:3.11-slim \
   sh -c "pip install -q -e '/core[dev]' -e /vnn && pytest"
 ```
