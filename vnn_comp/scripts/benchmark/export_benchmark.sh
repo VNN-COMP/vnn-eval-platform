@@ -19,6 +19,8 @@ set -eu
 # Capture the run so notify can POST it (host-side; fire-and-forget, no console reader).
 LOGFILE="$(mktemp)"
 exec >"$LOGFILE" 2>&1
+. "${COMP_LOG_LIB}"
+log_stage "Start — exporting benchmark ${benchmark_name}"
 
 ssh_key="${NODE_SSH_KEY:-$HOME/.ssh/vnncomp.pem}"
 name="${benchmark_name}"
@@ -29,7 +31,7 @@ notify() {  # success|failure — report completion to the backend, POSTing the 
     wget -q -O /dev/null "$url" 2>/dev/null && return 0
     python3 -c "import urllib.request;urllib.request.urlopen('$url')" 2>/dev/null
 }
-fail() { echo "[ERROR] $1"; notify failure; exit 1; }
+fail() { log_stage "End — export FAILED: $1"; notify failure; exit 1; }
 
 work="$(mktemp -d)"
 ephemeral=""
@@ -105,4 +107,5 @@ if [ -n "${benchmarks_repo}" ]; then
         git pull --rebase --autostash || fail "rebase failed"
     done
 fi
+log_stage "End — exported ${base}"
 notify success

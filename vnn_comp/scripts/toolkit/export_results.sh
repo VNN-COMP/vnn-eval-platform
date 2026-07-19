@@ -16,6 +16,8 @@ set -eu
 
 LOGFILE="$(mktemp)"
 exec >"$LOGFILE" 2>&1
+. "${COMP_LOG_LIB}"
+log_stage "Start — exporting results for ${benchmark_name}"
 
 ssh_key="${NODE_SSH_KEY:-$HOME/.ssh/vnncomp.pem}"
 node="ubuntu@${benchmark_ip}"
@@ -26,7 +28,7 @@ notify() {  # success|failure — report completion to the backend, POSTing the 
     wget -q -O /dev/null "$url" 2>/dev/null && return 0
     python3 -c "import urllib.request;urllib.request.urlopen('$url')" 2>/dev/null
 }
-fail() { echo "[ERROR] $1"; notify failure; exit 1; }
+fail() { log_stage "End — export FAILED: $1"; notify failure; exit 1; }
 
 work="$(mktemp -d)"
 cleanup() { rm -rf "$work"; rm -f "$LOGFILE"; }
@@ -45,7 +47,7 @@ scp -o StrictHostKeyChecking=accept-new -i "${ssh_key}" \
     || fail "no results.csv on the node for ${benchmark_name}"
 scp -r -o StrictHostKeyChecking=accept-new -i "${ssh_key}" \
     "${node}:/home/ubuntu/logs/counterexamples/${benchmark_name}" "$work/counterexamples" 2>/dev/null \
-    || echo "[INFO] no counterexamples for ${benchmark_name}"
+    || log_info "no counterexamples for ${benchmark_name}"
 
 cd "$repo_dir"
 git config user.name 'VNN-Comp Bot'
@@ -69,7 +71,7 @@ fi
 git add "$base"
 # Nothing staged means an identical re-run; that is a success, not a failure.
 if git diff --cached --quiet; then
-    echo "[INFO] results unchanged; nothing to commit"
+    log_stage "End — results unchanged; nothing to commit"
     notify success
     exit 0
 fi
@@ -83,5 +85,5 @@ if [ -n "${results_repo}" ]; then
         git pull --rebase --autostash origin HEAD || fail "rebase failed"
     done
 fi
-echo "[INFO] exported ${base}"
+log_stage "End — exported ${base}"
 notify success

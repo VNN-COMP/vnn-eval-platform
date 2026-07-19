@@ -21,16 +21,26 @@ remote_script_path="/home/ubuntu/generate_benchmark_${task_id}.sh"
 remote_log_path="/home/ubuntu/logs/generate.log"
 
 scp -o StrictHostKeyChecking=accept-new -i "${ssh_key}" \
-    "${script_here}/normalize_instances.py" "ubuntu@${benchmark_ip}:/home/ubuntu/"
+    "${script_here}/normalize_instances.py" "${COMP_LOG_LIB}" "ubuntu@${benchmark_ip}:/home/ubuntu/"
+ssh -o StrictHostKeyChecking=accept-new -i "${ssh_key}" "ubuntu@${benchmark_ip}" \
+    "mv /home/ubuntu/log.sh /home/ubuntu/comp_log.sh 2>/dev/null || true"
 
 ssh -o StrictHostKeyChecking=accept-new -i "${ssh_key}" "ubuntu@${benchmark_ip}" \
     "cat > ${remote_script_path} <<'REMOTE_SCRIPT'
 #!/bin/bash
+export COMP_LABEL=\"${COMP_LABEL:-VNN-COMP}\"
+. /home/ubuntu/comp_log.sh
 cd /home/ubuntu || exit 1
 mkdir -p logs
 exec > >(tee ${remote_log_path}) 2>&1
+log_stage 'Start — generating benchmark'
 set -x
-echo '[INFO] benchmark generation started'
+
+finish() {  # \$1 = success|failure — close the stage with a banner, then report
+    set +x
+    if [ \"\$1\" = success ]; then log_stage 'End — generation done'; else log_stage 'End — generation FAILED'; fi
+    report \"\$1\"
+}
 
 ensure_uv() {
     command -v curl >/dev/null 2>&1 || { sudo apt-get update && sudo apt-get install -y curl; }
@@ -86,8 +96,8 @@ rm -rf benchmark \
             echo '[WARN] VNNLIB 2.0 conversion failed; keeping only 1.0'; rm -rf vnnlib2; \
         fi; \
     fi \
-    && report success \
-    || report failure
+    && finish success \
+    || finish failure
 REMOTE_SCRIPT
 chmod +x ${remote_script_path}
 tmux new-session -d -s generation /bin/bash ${remote_script_path}"

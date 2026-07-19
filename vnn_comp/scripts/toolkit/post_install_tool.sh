@@ -20,6 +20,9 @@ remote_log_path="/home/ubuntu/logs/post_install.log"
 
 if [ "${run_as_root}" = "true" ]; then sudo="sudo -E"; else sudo=""; fi
 
+# Ship the shared logging helpers so the remote banners match every other stage.
+scp -o StrictHostKeyChecking=accept-new -i "${ssh_key}" "${COMP_LOG_LIB}" "${node}:/home/ubuntu/comp_log.sh"
+
 # A submitted script replaces the repo's copy. Strip CRs: the form is a browser textarea.
 if [ -n "${post_install_tool}" ]; then
     tmp="$(mktemp)"
@@ -33,10 +36,12 @@ fi
 ssh -o StrictHostKeyChecking=accept-new -i "${ssh_key}" "$node" \
     "cat > ${remote_script_path} <<'REMOTE_SCRIPT'
 #!/bin/bash
+export COMP_LABEL=\"${COMP_LABEL:-VNN-COMP}\"
+. /home/ubuntu/comp_log.sh
 cd /home/ubuntu || exit 1
 mkdir -p logs
 exec > >(tee ${remote_log_path}) 2>&1
-set -x
+log_stage 'Start — post-installation'
 
 report() {  # success|failure — POST the log tail so the error survives node teardown
     tail -c 200000 ${remote_log_path} > /tmp/post_install_${task_id}.tail 2>/dev/null || true
@@ -45,7 +50,8 @@ report() {  # success|failure — POST the log tail so the error survives node t
 }
 
 if [ ! -f ${remote_dir}/post_install_tool.sh ]; then
-    echo '[INFO] no post-installation script for this submission; nothing to do'
+    log_info 'no post-installation script for this submission; nothing to do'
+    log_stage 'End — post-installation (skipped)'
     report success
     exit 0
 fi
@@ -57,12 +63,16 @@ else
     export PATH=\"/home/ubuntu/anaconda3/bin:\$PATH\"
 fi
 
-cd ${remote_dir} \
-    && cat post_install_tool.sh \
+log_step 'RUNNING post_install_tool.sh:'
+if cd ${remote_dir} \
     && chmod +x post_install_tool.sh \
-    && ${sudo} env SHELLOPTS=xtrace /bin/bash post_install_tool.sh \
-    && report success \
-    || report failure
+    && ${sudo} /bin/bash post_install_tool.sh; then
+    log_stage 'End — post-installation done'
+    report success
+else
+    log_stage 'End — post-installation FAILED'
+    report failure
+fi
 REMOTE_SCRIPT
 chmod +x ${remote_script_path}
 tmux kill-session -t post_installation 2>/dev/null

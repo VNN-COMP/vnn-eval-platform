@@ -19,17 +19,23 @@
 set -eu
 
 ssh_key="${NODE_SSH_KEY:-$HOME/.ssh/vnncomp.pem}"
+node="ubuntu@${benchmark_ip}"
 remote_script_path="/home/ubuntu/check_results_${task_id}.sh"
 remote_log_path="/home/ubuntu/logs/check_${benchmark_name}.log"
 
-ssh -o StrictHostKeyChecking=accept-new -i "${ssh_key}" "ubuntu@${benchmark_ip}" \
+# Ship the shared logging helpers so the remote banners match every other stage.
+scp -o StrictHostKeyChecking=accept-new -i "${ssh_key}" "${COMP_LOG_LIB}" "${node}:/home/ubuntu/comp_log.sh"
+
+ssh -o StrictHostKeyChecking=accept-new -i "${ssh_key}" "$node" \
     "cat > ${remote_script_path} <<'REMOTE_SCRIPT'
 #!/bin/bash
+export COMP_LABEL=\"${COMP_LABEL:-VNN-COMP}\"
+. /home/ubuntu/comp_log.sh
 cd /home/ubuntu || exit 1
 mkdir -p logs
 exec > >(tee ${remote_log_path}) 2>&1
+log_stage 'Start — validating ${benchmark_name} with the official scorer'
 set -x
-echo '[INFO] validating ${benchmark_name} results with the official scorer'
 
 report() {  # success|failure — POST the log tail so the summary survives node teardown
     tail -c 200000 ${remote_log_path} > /tmp/check_${task_id}.tail 2>/dev/null || true
@@ -37,8 +43,9 @@ report() {  # success|failure — POST the log tail so the summary survives node
     return 0
 }
 skip() {  # the run stands; only its validation is missing
-    echo \"[ERROR] \$1\"
-    echo '[WARN] skipping validation; the run itself is unaffected'
+    set +x
+    log_info \"skipping validation: \$1 (the run itself is unaffected)\"
+    log_stage 'End — validation skipped'
     report success
     exit 0
 }
@@ -52,7 +59,7 @@ ensure_uv() {
 }
 
 results_csv=/home/ubuntu/logs/results_${benchmark_name}.csv
-[ -s \"\${results_csv}\" ] || { echo '[WARN] no results to validate'; report success; exit 0; }
+[ -s \"\${results_csv}\" ] || { set +x; log_info 'no results to validate'; log_stage 'End — nothing to validate'; report success; exit 0; }
 
 scoring=/home/ubuntu/scoring
 rm -rf \${scoring} && mkdir -p \${scoring} && cd \${scoring} \
@@ -95,6 +102,7 @@ uv venv --python \${SCORING_PYTHON} --seed \${venv} || skip 'could not create th
     && \${venv}/bin/python3 -m pip install -r requirements.txt \
     || skip 'could not install the scorer requirements'
 
+{ set +x; log_step 'RUNNING process_results.py (official scorer):'; set -x; } 2>/dev/null
 # A path relative to SCORING/, never absolute: the scorer reads the tool name out of the
 # path's second segment and rebuilds each witness path as ../<tool>/<run folder>/<..>.gz,
 # so an absolute path silently makes the tool 'home' and every counterexample missing.
@@ -104,7 +112,8 @@ uv venv --python \${SCORING_PYTHON} --seed \${venv} || skip 'could not create th
 
 # Keep each witness's verdict beside its counterexample, so the export ships it.
 cp \${run_dir}/*.counterexample.check.json /home/ubuntu/logs/counterexamples/${benchmark_name}/ 2>/dev/null || true
-echo '[INFO] validation finished'
+set +x
+log_stage 'End — validation finished'
 report success
 REMOTE_SCRIPT
 chmod +x ${remote_script_path}
