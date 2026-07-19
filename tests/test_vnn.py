@@ -105,6 +105,35 @@ def test_toolkit_records_resolved_commit(monkeypatch):
     assert tool.hash == "feedface1234"
 
 
+def test_build_steps_benchmark_splits_generation():
+    """Benchmark generation is split into setup / generate / (convert) steps; the 1.0 ->
+    2.0 conversion step is present only for a 1.0 submission."""
+    from comp_eval_platform.competitions import get_competition
+    from comp_eval_platform.core.models import Benchmark, Category, Task
+    from comp_eval_platform.core.models.execution import SHUTDOWN_KIND
+
+    from vnn_comp import kinds
+
+    cat = Category.objects.create(name="default")
+    b1 = Benchmark.objects.create(owner=_user(), category=cat, name="b1",
+                                  extra={"repository": "r", "vnnlib_version": "1.0"})
+    t1 = Task.objects.create(owner=b1.owner, benchmark=b1)
+    get_competition().build_steps(t1)
+    assert list(t1.step_set.order_by("order").values_list("kind", flat=True)) == [
+        kinds.CREATE, "assign", kinds.GENERATE_SETUP, kinds.GENERATE, kinds.CONVERT,
+        kinds.BENCHMARK_EXPORT, SHUTDOWN_KIND,
+    ]
+
+    b2 = Benchmark.objects.create(owner=_user(), category=cat, name="b2",
+                                  extra={"repository": "r", "vnnlib_version": "2.0"})
+    t2 = Task.objects.create(owner=b2.owner, benchmark=b2)
+    get_competition().build_steps(t2)
+    assert list(t2.step_set.order_by("order").values_list("kind", flat=True)) == [
+        kinds.CREATE, "assign", kinds.GENERATE_SETUP, kinds.GENERATE,
+        kinds.BENCHMARK_EXPORT, SHUTDOWN_KIND,
+    ]
+
+
 def test_build_steps_basic_graph():
     from comp_eval_platform.competitions import get_competition
     from comp_eval_platform.core.models import Benchmark, Category, Task, Tool

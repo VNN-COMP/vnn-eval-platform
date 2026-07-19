@@ -98,15 +98,17 @@ class VNNCompetition(Competition):
         else:  # benchmark submission: generate instances from the repo, then export them
             bench = task.benchmark
             opts = bench.extra or {}
-            steps += [
-                add(kinds.CREATE),
-                add("assign"),
-                add(kinds.GENERATE, benchmark_id=str(bench.id),
-                    version=opts.get("vnnlib_version", "1.0")),
-                add(kinds.BENCHMARK_EXPORT, benchmark_id=str(bench.id),
-                    version=opts.get("vnnlib_version", "1.0")),
-                add(SHUTDOWN_KIND),
-            ]
+            version = opts.get("vnnlib_version", "1.0")
+            steps.append(add(kinds.CREATE))
+            steps.append(add("assign"))
+            # Setup (clone + generator venv), generate, then convert are separate steps so
+            # each phase reports its own progress; conversion runs only for 1.0.
+            steps.append(add(kinds.GENERATE_SETUP, benchmark_id=str(bench.id), version=version))
+            steps.append(add(kinds.GENERATE, benchmark_id=str(bench.id), version=version))
+            if version == "1.0":
+                steps.append(add(kinds.CONVERT, benchmark_id=str(bench.id), version=version))
+            steps.append(add(kinds.BENCHMARK_EXPORT, benchmark_id=str(bench.id), version=version))
+            steps.append(add(SHUTDOWN_KIND))
         return steps
 
     # (3) Node scripts + I/O contract -------------------------------------

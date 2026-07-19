@@ -334,10 +334,30 @@ def _generation_params(task, step):
 
 
 @register_step_handler
+class GenerateSetupHandler(StepHandler):
+    """Prepare the node for generation: clone the source repo @ hash and build the
+    generator's virtualenv. Split from generation so the clone and the (often slow)
+    dependency install show as their own live step."""
+
+    kind = kinds.GENERATE_SETUP
+    node_log_path = "logs/generate_setup.log"  # setup_benchmark.sh tees the run here
+
+    def execute(self):
+        if self.node_ip is None:
+            self.task.step_failed(check_status=False)
+            return
+        _b, params = _generation_params(self.task, self.step)
+        _ping("benchmark", "setup_benchmark.sh", params)
+
+    def retry_until_success(self) -> bool:
+        return True  # clone + pip are flaky over the network; retry rather than fail
+
+
+@register_step_handler
 class GenerateHandler(StepHandler):
-    """Generate a benchmark on the node: clone the source repo @ hash, run its
-    generator (generate_properties.py <seed>) and normalize into instances.csv +
-    onnx/vnnlib. The node curls back on completion."""
+    """Run the benchmark's generator on the node: generate_properties.py <seed>, then
+    normalize into instances.csv + onnx/vnnlib. The repo and generator venv are already
+    in place from the setup step. The node curls back on completion."""
 
     kind = kinds.GENERATE
     node_log_path = "logs/generate.log"  # generate_benchmark.sh tees the run here
@@ -369,6 +389,28 @@ class GenerateHandler(StepHandler):
         csv_text = node_exec(ip, f"cat /home/ubuntu/benchmark/{script_dir}/{csv_file} 2>/dev/null")
         if csv_text.strip():
             ensure_instances(b, csv_text)
+
+
+@register_step_handler
+class ConvertHandler(StepHandler):
+    """Best-effort VNNLIB 1.0 -> 2.0 conversion on the node (only for 1.0 submissions).
+    Its own step so the conversion's Python 3.12 venv + pip installs show a live log
+    instead of a silent stretch inside generation. A failed conversion is not fatal:
+    convert_vnnlib.sh always reports success, so the benchmark still exports its 1.0
+    files."""
+
+    kind = kinds.CONVERT
+    node_log_path = "logs/convert.log"  # convert_vnnlib.sh tees the run here
+
+    def execute(self):
+        if self.node_ip is None:
+            self.task.step_succeeded(check_status=False)  # conversion is best-effort
+            return
+        _b, params = _generation_params(self.task, self.step)
+        _ping("benchmark", "convert_vnnlib.sh", params)
+
+    def is_instance_loss_valid_end(self) -> bool:
+        return True  # a lost node during conversion shouldn't fail the task
 
 
 @register_step_handler
