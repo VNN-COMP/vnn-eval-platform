@@ -209,7 +209,13 @@ class VNNCompetition(Competition):
             ],
             score_columns=["tool", "solved", "time"],
             branding=Branding(
-                primary_color="#1e3a8a",  # deep blue, matching the VNN-COMP logo
+                # Gradient's leading color, so all primary accents match the navbar.
+                primary_color="#667eea",
+                # Purple navbar gradient matching the main site (vnn-comp.github.io).
+                navbar_gradient="linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                # Outlined/secondary buttons use the gradient's darker trailing color
+                # (the light leading color reads as faint at outline weight).
+                accent_color="#764ba2",
                 hero_image="https://miro.medium.com/max/1400/1*zlt_wRZCGofSbmSqduds9w.png",
                 favicon="/api/competition/assets/favicon.png",
             ),
