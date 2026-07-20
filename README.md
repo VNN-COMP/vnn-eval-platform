@@ -1,4 +1,4 @@
-# vnn-comp
+# VNN-COMP
 
 The **VNN-COMP** variant of [comp-eval-platform](https://github.com/TUMcps/core-eval-platform): the `vnn_comp` plugin
 app plus its deploy config, depending on the core engine. All the heavy lifting lives in core;
