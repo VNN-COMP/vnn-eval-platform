@@ -22,5 +22,5 @@ dev = ["comp-eval-platform[dev]"]
 [tool.hatch.build.targets.wheel]
 packages = ["vnn_comp"]
 
-# During local dev, install the core from the sibling checkout:
-#   pip install -e ../comp-eval-platform -e .
+# During local dev, install the core from the ./core submodule:
+#   pip install -e ./core -e .

@@ -2,6 +2,10 @@
 # shell + a Cloudflare quick-tunnel for remote viewing.
 #   docker compose up            -> frontend proxied at http://localhost:5173
 #   docker compose logs cloudflared | grep trycloudflare   -> the public URL
+#
+# Fixed project name so the default network is `vnn-comp_default` regardless of
+# the checkout directory (VNNCOMP_DOCKER_NETWORK below must match it).
+name: vnn-comp
 services:
   db:
     image: postgres:16
@@ -23,7 +27,7 @@ services:
       dockerfile: deploy/Dockerfile
     working_dir: /app
     volumes:
-      - ../comp-eval-platform:/core
+      - ./core:/core   # the core engine, vendored as a git submodule (pinned)
       - .:/app
       - vnndata:/data   # local benchmark/results git repos (DATA_DIR)
       - /var/run/docker.sock:/var/run/docker.sock   # local_docker: run node containers
@@ -47,7 +51,7 @@ services:
       SCRIPT_ROOT: /app/vnn_comp
       NODE_SSH_KEY: /root/.ssh/vnncomp.pem
       VNNCOMP_DOCKER_SSH_KEY: /root/.ssh/vnncomp.pem
-      VNNCOMP_DOCKER_NETWORK: vnn-comp-new_default
+      VNNCOMP_DOCKER_NETWORK: vnn-comp_default
       VNNCOMP_DEFAULT_DOCKER_IMAGE: ubuntu:22.04
     command: >
       sh -c "mkdir -p /root/.ssh &&
@@ -66,7 +70,7 @@ services:
     image: node:20-slim
     working_dir: /app
     volumes:
-      - ../comp-eval-platform/frontend:/app
+      - ./core/frontend:/app
       - frontend_node_modules:/app/node_modules
     environment:
       VITE_API_URL: http://backend:8000   # Vite proxies /api and /update here
