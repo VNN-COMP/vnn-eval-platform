@@ -1,6 +1,6 @@
 # vnn-comp
 
-The **VNN-COMP** variant of [comp-eval-platform](../comp-eval-platform): the `vnn_comp` plugin
+The **VNN-COMP** variant of [comp-eval-platform](https://github.com/TUMcps/core-eval-platform): the `vnn_comp` plugin
 app plus its deploy config, depending on the core engine. All the heavy lifting lives in core;
 this repo is the VNN-specific seams, step handlers, and node scripts.
 
@@ -16,8 +16,8 @@ Clone this repo and the core engine **side by side** under the same parent direc
 file mounts `../comp-eval-platform`):
 
 ```bash
-git clone <core-repo>   comp-eval-platform
-git clone <this-repo>   vnn-comp-new
+git clone https://github.com/TUMcps/core-eval-platform.git   comp-eval-platform
+git clone https://github.com/VNN-COMP/vnn-eval-platform.git   vnn-comp-new
 cd vnn-comp-new && docker compose up --build
 ```
 
