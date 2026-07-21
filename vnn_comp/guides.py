@@ -93,7 +93,8 @@ def toolkit_guide() -> Guide:
                     "One step per selected benchmark, so a benchmark that fails does not take the "
                     "others with it. For each instance the worker runs `prepare_instance.sh v1 "
                     "<category> <onnx> <vnnlib>` and then `run_instance.sh v1 <category> <onnx> "
-                    "<vnnlib> <out> <timeout>`. For VNN-COMP the category is the benchmark name.",
+                    "<vnnlib> <result-file> <timeout>`. For VNN-COMP the category is the benchmark "
+                    "name.",
                     "`prepare_instance.sh` is capped at 600 s and `run_instance.sh` at that "
                     "instance's own timeout from `instances.csv`; a nonzero exit from "
                     "`prepare_instance.sh` skips the rest of that benchmark, as the rules require.",
@@ -150,15 +151,13 @@ def toolkit_guide() -> Guide:
                         "v1 <category> <onnx> <vnnlib>`, to prepare whatever that instance needs. "
                         "Capped at 600 s, and a nonzero exit skips the rest of the benchmark.",
                         "`run_instance.sh` — runs one instance as `run_instance.sh v1 <category> "
-                        "<onnx> <vnnlib> <out> <timeout>` and writes its verdict as the first line "
-                        "of `<out>`. Capped at that instance's timeout from `instances.csv`.",
+                        "<onnx> <vnnlib> <result-file> <timeout>` and writes its verdict as the "
+                        "first line of `<result-file>`. Capped at that instance's timeout from "
+                        "`instances.csv`.",
                         "`post_install.sh` (optional) — a template for the post-installation step. "
                         "It is not run from your repository: paste its contents into the “Post "
                         "installation script” field on the submission form.",
                     ]},
-                    {"type": "note", "text":
-                        "No `config.yaml` is needed. The submission form collects that "
-                        "configuration directly."},
                 ],
             },
             {
@@ -173,10 +172,6 @@ def toolkit_guide() -> Guide:
                         "For VNNLIB 2.0 benchmarks, follow the [VNNLIB 2.0 standard]"
                         "(https://www.vnnlib.org/) (Sec. 5.3.1, command-line assignment):"},
                     {"type": "code", "code": _CE_2_0},
-                    {"type": "note", "text":
-                        "Every counterexample is re-checked by the scorer, so one that cannot be "
-                        "parsed, or that does not actually violate the property, does not earn the "
-                        "instance — write these exactly as specified."},
                 ],
             },
             {
