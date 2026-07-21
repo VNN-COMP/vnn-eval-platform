@@ -230,7 +230,7 @@ class VNNCompetition(Competition):
                 related={
                     "text": "Interested in verifying neural network control systems? Check out ARCH-COMP!",
                     "label": "Visit ARCH-COMP",
-                    "url": "https://arch.repeatability.cps.cit.tum.de",
+                    "url": "https://arch-comp.github.io/",
                 },
             ),
             guides={"toolkit": toolkit_guide(), "benchmark": benchmark_guide()},
