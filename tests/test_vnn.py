@@ -158,6 +158,24 @@ def test_build_steps_basic_graph():
     ]
 
 
+def test_build_steps_carries_the_random10_evaluation_mode():
+    from comp_eval_platform.competitions import get_competition
+    from comp_eval_platform.core.models import Benchmark, Category, Task, Tool
+
+    from vnn_comp import kinds
+
+    cat = Category.objects.create(name="default")
+    tool = Tool.objects.create(owner=_user(), category=cat, name="t", repository="r",
+                               extra={"run_networks": "random10"})
+    Benchmark.objects.create(owner=_user(), category=cat, name="b1", published=True)
+
+    task = Task.objects.create(owner=tool.owner, tool=tool)
+    get_competition().build_steps(task)
+
+    step = task.step_set.get(kind=kinds.RUN_BENCHMARK)
+    assert step.payload["run_networks"] == "random10"
+
+
 def test_build_steps_with_pause_and_export():
     from comp_eval_platform.competitions import get_competition
     from comp_eval_platform.core.models import Benchmark, Category, Task, Tool

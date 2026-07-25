@@ -200,7 +200,7 @@ class VNNCompetition(Competition):
             result_columns=["instance", "result", "time"],
             submission_fields=[
                 {"name": "vnnlib_version", "type": "select", "options": ["1.0", "2.0"]},
-                {"name": "run_networks", "type": "select", "options": ["all", "some"]},
+                {"name": "run_networks", "type": "select", "options": ["all", "random10", "some"]},
                 {"name": "install_as_root", "type": "bool"},
                 {"name": "export_results", "type": "bool"},
             ],
