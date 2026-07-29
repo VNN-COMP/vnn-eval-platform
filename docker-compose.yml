@@ -53,6 +53,8 @@ services:
       VNNCOMP_DOCKER_SSH_KEY: /root/.ssh/vnncomp.pem
       VNNCOMP_DOCKER_NETWORK: vnn-comp_default
       VNNCOMP_DEFAULT_DOCKER_IMAGE: ubuntu:22.04
+      REMOTE_DOCKER_WORKER_URL: "localhost"
+      REMOTE_DOCKER_WORKER_PORT: "9001"
     command: >
       sh -c "mkdir -p /root/.ssh &&
              [ -f /root/.ssh/vnncomp.pem ] || ssh-keygen -q -t ed25519 -N '' -f /root/.ssh/vnncomp.pem &&
