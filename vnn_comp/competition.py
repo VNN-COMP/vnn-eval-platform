@@ -10,6 +10,7 @@ import os
 from django.core.exceptions import ValidationError
 
 from comp_eval_platform.competitions import Competition
+from comp_eval_platform.core.evaluation_modes import EvaluationMode
 from comp_eval_platform.core.models.execution import PAUSE_KIND, SHUTDOWN_KIND
 from comp_eval_platform.results import Branding, Landing, Presentation, ResultRecord, Scoreboard
 
@@ -200,7 +201,7 @@ class VNNCompetition(Competition):
             result_columns=["instance", "result", "time"],
             submission_fields=[
                 {"name": "vnnlib_version", "type": "select", "options": ["1.0", "2.0"]},
-                {"name": "run_networks", "type": "select", "options": ["all", "random10", "some"]},
+                {"name": "run_networks", "type": "select", "options": [mode.value for mode in EvaluationMode]},
                 {"name": "install_as_root", "type": "bool"},
                 {"name": "export_results", "type": "bool"},
             ],
