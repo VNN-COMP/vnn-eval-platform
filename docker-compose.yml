@@ -4,7 +4,7 @@
 #   docker compose logs cloudflared | grep trycloudflare   -> the public URL
 #
 # Fixed project name so the default network is `vnn-comp_default` regardless of
-# the checkout directory (VNNCOMP_DOCKER_NETWORK below must match it).
+# the checkout directory (COMP_DOCKER_NETWORK below must match it).
 name: vnn-comp
 services:
   db:
@@ -49,17 +49,17 @@ services:
       # this compose project's network so backend<->node SSH and node->backend
       # callbacks resolve).
       SCRIPT_ROOT: /app/vnn_comp
-      NODE_SSH_KEY: /root/.ssh/vnncomp.pem
-      VNNCOMP_DOCKER_SSH_KEY: /root/.ssh/vnncomp.pem
-      VNNCOMP_DOCKER_NETWORK: vnn-comp_default
-      VNNCOMP_DEFAULT_DOCKER_IMAGE: ubuntu:22.04
+      NODE_SSH_KEY: /root/.ssh/comp.pem
+      COMP_DOCKER_SSH_KEY: /root/.ssh/comp.pem
+      COMP_DOCKER_NETWORK: vnn-comp_default
+      COMP_DEFAULT_DOCKER_IMAGE: ubuntu:22.04
       # Remote docker worker settings for remote execution backend
       REMOTE_DOCKER_WORKER_URL: "${REMOTE_DOCKER_WORKER_URL:-host.docker.internal}"
       REMOTE_DOCKER_WORKER_PORT: "${REMOTE_DOCKER_WORKER_PORT:-9001}"
     command: >
       sh -c "mkdir -p /root/.ssh &&
-             [ -f /root/.ssh/vnncomp.pem ] || ssh-keygen -q -t ed25519 -N '' -f /root/.ssh/vnncomp.pem &&
-             chmod 400 /root/.ssh/vnncomp.pem &&
+             [ -f /root/.ssh/comp.pem ] || ssh-keygen -q -t ed25519 -N '' -f /root/.ssh/comp.pem &&
+             chmod 400 /root/.ssh/comp.pem &&
              find /app/vnn_comp/scripts -name '*.sh' -exec chmod +x {} + &&
              pip install -q -e /core -e . &&
              python deploy/manage.py migrate &&
