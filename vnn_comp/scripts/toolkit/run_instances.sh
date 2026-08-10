@@ -70,7 +70,7 @@ select_instances() {
     case "${run_networks}" in
         first)     head -n 1 "$bench_dir/instances.csv" ;;
         different) awk -F, '!seen[$1]++' "$bench_dir/instances.csv" ;;
-        random)    shuf -n 10 "$bench_dir/instances.csv" ;;
+        random10)  shuf -n 10 "$bench_dir/instances.csv" ;;
         *)         cat "$bench_dir/instances.csv" ;;
     esac
 }
