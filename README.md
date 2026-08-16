@@ -37,8 +37,6 @@ To import all official VNN-COMP 2026 benchmarks into your local installation at 
 docker compose exec backend git clone https://github.com/VNN-COMP/vnncomp2026_benchmarks.git /tmp/benchmarks
 docker compose exec backend python deploy/manage.py bulk_import --repo-path /tmp/benchmarks/benchmarks
 ```
-This clones the official benchmark repository and imports all benchmarks into the database. Each benchmark's metadata is also saved as a data.json file next to its README.md, which can be drag-and-dropped into the benchmark submission form to pre-fill the fields.
-
 
 ## Standalone Worker Server
 
