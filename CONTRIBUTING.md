@@ -40,6 +40,6 @@ docker run --rm -v "$PWD/core:/core" -v "$PWD:/vnn" -w /vnn python:3.11-slim \
 ## Continuous integration
 
 The GitHub Actions workflow in `.github/workflows/ci.yml` runs for pushes to every branch, pull
-requests, and manual dispatches. It checks the plugin's Python tests, tests and builds the shared
-frontend, and verifies that the backend Docker image builds. The checkout steps initialize the
-pinned `core` submodule automatically.
+requests, and manual dispatches. It runs the plugin and pinned core Python tests, tests and builds
+the shared frontend, and verifies that the backend Docker image builds. The checkout steps
+initialize the pinned `core` submodule automatically.
