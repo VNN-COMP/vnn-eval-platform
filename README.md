@@ -28,7 +28,19 @@ To try a submission, start from the examples:
 - Benchmark: <https://github.com/VNN-COMP/example_benchmark>
 - Tool: <https://github.com/VNN-COMP/example_toolkit>
 
-Standalone Worker Server
+
+## Importing Benchmarks
+
+To import all official VNN-COMP 2026 benchmarks into your local installation at once, run:
+
+```bash
+docker compose exec backend git clone https://github.com/VNN-COMP/vnncomp2026_benchmarks.git /tmp/benchmarks
+docker compose exec backend python deploy/manage.py bulk_import --repo-path /tmp/benchmarks/benchmarks
+```
+This clones the official benchmark repository and imports all benchmarks into the database. Each benchmark's metadata is also saved as a data.json file next to its README.md, which can be drag-and-dropped into the benchmark submission form to pre-fill the fields.
+
+
+## Standalone Worker Server
 
 The platform supports running the website and the worker on separate machines — a lightweight VM serves the frontend and schedules jobs, while a heavier machine (e.g. a lab server or GPU node) runs the Docker containers that execute the submissions.
 
