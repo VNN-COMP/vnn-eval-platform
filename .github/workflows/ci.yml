@@ -41,8 +41,11 @@ jobs:
       - name: Check installed dependencies
         run: python -m pip check
 
-      - name: Run tests
+      - name: Run VNN tests
         run: python -m pytest
+
+      - name: Run core tests
+        run: python -m pytest -c core/pytest.ini core/tests
 
   frontend:
     name: Frontend checks
