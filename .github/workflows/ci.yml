@@ -41,6 +41,13 @@ jobs:
       - name: Check installed dependencies
         run: python -m pip check
 
+      - name: Check Django configuration and migrations
+        env:
+          DJANGO_SETTINGS_MODULE: deploy.settings_test
+        run: |
+          python deploy/manage.py check
+          python deploy/manage.py makemigrations --check --dry-run
+
       - name: Run VNN tests
         run: python -m pytest
 
@@ -64,7 +71,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: "20"
+          node-version: "24"
           cache: npm
           cache-dependency-path: core/frontend/package-lock.json
 
@@ -78,7 +85,7 @@ jobs:
         run: npm run build
 
   container:
-    name: Container build
+    name: Base image build
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -86,5 +93,8 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v6
 
-      - name: Build backend image
+      - name: Validate Docker Compose configuration
+        run: docker compose config --quiet
+
+      - name: Build backend base image
         run: docker build --file deploy/Dockerfile --tag eval-platform:ci .
