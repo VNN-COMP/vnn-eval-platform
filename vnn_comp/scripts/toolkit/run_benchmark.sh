@@ -1,27 +1,13 @@
 #!/bin/sh
 # Put one benchmark on the node and start the tool over its instances.
-#
-# A generated benchmark lives in the benchmarks repo (a configured remote, else the
-# local repo the benchmark-export step commits to) and never on the node, so this
-# copies the tree across first. The per-instance loop itself runs on the node
-# (run_instances.sh), which reports to ${ROOT_URL}/update/${task_id}/success|failure;
-# only prep failures are reported from here.
-#
-# Reads the export layout: benchmarks/<name>/<vnnlib_version>/{onnx,vnnlib,instances.csv}
-#
-# Params (env, from the step handler): benchmark_ip task_id benchmark_name
-# vnnlib_version run_networks run_as_root script_dir benchmarks_repo deploy_key
-# local_repo. ROOT_URL comes from the backend environment; NODE_SSH_KEY locates the key.
+# (Now supports both AWS remote execution and Local Docker execution)
+
 set -eu
 
-# Capture the prep for notify to POST (fire-and-forget; nothing reads our console).
 LOGFILE="$(mktemp)"
 exec >"$LOGFILE" 2>&1
 
-ssh_key="${NODE_SSH_KEY:-$HOME/.ssh/vnncomp.pem}"
 script_here="$(dirname "$0")"
-ssh_opts="-o StrictHostKeyChecking=accept-new -i ${ssh_key}"
-node="ubuntu@${benchmark_ip}"
 
 notify() {  # success|failure — report completion to the backend, POSTing the run log
     url="${ROOT_URL}/update/${task_id}/$1"
@@ -34,6 +20,51 @@ fail() { echo "[ERROR] $1"; notify failure; exit 1; }
 ephemeral=""
 cleanup() { rm -f "$LOGFILE"; [ -n "$ephemeral" ] && rm -rf "$ephemeral"; }
 trap cleanup EXIT
+
+# ---------------------------------------------------------
+# Check if the IP belongs to a local Docker network (172.*, 10.*, 192.168.*, 127.*)
+# ---------------------------------------------------------
+case "$benchmark_ip" in
+    127.*|172.*|10.*|192.168.*|localhost)
+        IS_LOCAL=1
+        ;;
+    *)
+        IS_LOCAL=0
+        ;;
+esac
+
+# ---------------------------------------------------------
+# LOCAL EXECUTION MODE
+# ---------------------------------------------------------
+if [ $IS_LOCAL -eq 1 ]; then
+    # We are running locally. No need to scp files or use tmux.
+    # The benchmark repository is already accessible locally (mounted via volume).
+    
+    # Export parameters required by run_instances.sh
+    export COMP_LABEL="${COMP_LABEL:-VNN-COMP}"
+    export ROOT_URL="${ROOT_URL}"
+    export task_id="${task_id}"
+    export benchmark_name="${benchmark_name}"
+    export competition_year="${competition_year}"
+    export vnnlib_version="${vnnlib_version}"
+    export script_dir="${script_dir}"
+    export run_networks="${run_networks}"
+    export run_as_root="${run_as_root}"
+    export COMP_LOG_LIB="${COMP_LOG_LIB:-/app/vnn_comp/scripts/toolkit/comp_log.sh}"
+
+    # Execute the actual test loop script in the background
+    nohup /bin/bash "${script_here}/run_instances.sh" >/dev/null 2>&1 &
+    
+    echo "[INFO] ${benchmark_name} started locally; the script reports back when it finishes"
+    exit 0
+fi
+
+# ---------------------------------------------------------
+# AWS / REMOTE EXECUTION MODE (Original Code)
+# ---------------------------------------------------------
+ssh_key="${NODE_SSH_KEY:-$HOME/.ssh/vnncomp.pem}"
+ssh_opts="-o StrictHostKeyChecking=accept-new -i ${ssh_key}"
+node="ubuntu@${benchmark_ip}"
 
 # Source of the generated benchmark: an ephemeral clone of the remote, or the local repo.
 if [ -n "${benchmarks_repo}" ]; then

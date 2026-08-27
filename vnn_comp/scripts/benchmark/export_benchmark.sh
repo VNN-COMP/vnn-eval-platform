@@ -1,19 +1,6 @@
 #!/bin/sh
 # Store a generated benchmark's files + a source README in a git repo.
-#
-# Runs on the backend host: scp's the generated tree back from the node, then
-# commits it. Default (empty benchmarks_repo) -> a persistent local repo under
-# local_repo, no external setup. A configured remote is cloned/pushed instead;
-# its deploy key stays on the host, never copied to a node. The step is reported
-# done via ${ROOT_URL}/update/${task_id}/success|failure.
-#
-# Layout: categories (ARCH) -> benchmarks/<category>/<name>/; VNN (flat) ->
-# benchmarks/<name>/<vnnlib_version>/, plus a 2.0/ tree when generation made one.
-# *.onnx and *.vnnlib use Git LFS.
-#
-# Params (env): benchmark_ip task_id benchmark_name category uses_categories
-# repository hash seed script_dir onnx_dir vnnlib_dir csv_file vnnlib_version
-# benchmarks_repo deploy_key local_repo. NODE_SSH_KEY/ROOT_URL from the env.
+# (Now supports both AWS remote execution and Local Docker execution)
 set -eu
 
 # Capture the run so notify can POST it (host-side; fire-and-forget, no console reader).
@@ -21,6 +8,18 @@ LOGFILE="$(mktemp)"
 exec >"$LOGFILE" 2>&1
 . "${COMP_LOG_LIB}"
 log_stage "Start — exporting benchmark ${benchmark_name}"
+
+# Check if the IP belongs to a local Docker network (172.*, 10.*, 192.168.*, 127.*)
+case "$benchmark_ip" in
+    127.*|172.*|10.*|192.168.*|localhost)
+        IS_LOCAL=1
+        BASE_DIR="/app"
+        ;;
+    *)
+        IS_LOCAL=0
+        BASE_DIR="/home/ubuntu"
+        ;;
+esac
 
 ssh_key="${NODE_SSH_KEY:-$HOME/.ssh/vnncomp.pem}"
 name="${benchmark_name}"
@@ -63,9 +62,14 @@ git lfs install --local >/dev/null 2>&1 || true
 git lfs track '*.onnx' '*.vnnlib' >/dev/null 2>&1 || true
 
 # Pull the generated tree back from the node.
-if [ "${script_dir}" = "." ]; then rpath="/home/ubuntu/benchmark"; else rpath="/home/ubuntu/benchmark/${script_dir}"; fi
-scp -r -o StrictHostKeyChecking=accept-new -i "${ssh_key}" "ubuntu@${benchmark_ip}:${rpath}" "$work/src" \
-    || fail "scp from node failed"
+if [ "${script_dir}" = "." ]; then rpath="${BASE_DIR}/benchmark"; else rpath="${BASE_DIR}/benchmark/${script_dir}"; fi
+
+if [ $IS_LOCAL -eq 1 ]; then
+    cp -r "${rpath}" "$work/src" || fail "cp from local node failed"
+else
+    scp -r -o StrictHostKeyChecking=accept-new -i "${ssh_key}" "ubuntu@${benchmark_ip}:${rpath}" "$work/src" \
+        || fail "scp from node failed"
+fi
 src="$work/src"
 
 copy_tree() {  # <src_root> <dest_dir>
@@ -108,4 +112,4 @@ if [ -n "${benchmarks_repo}" ]; then
     done
 fi
 log_stage "End — exported ${base}"
-notify success
+notify successdocker compose down

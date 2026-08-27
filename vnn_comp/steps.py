@@ -30,16 +30,27 @@ class CreateHandler(StepHandler):
 @register_step_handler
 class InstallHandler(StepHandler):
     kind = kinds.INSTALL
-    node_log_path = "logs/install.log"  # install_tool.sh tees the run here
+    node_log_path = "logs/install.log" 
+
+    def is_local_execution(self):
+        from comp_eval_platform.core.models import RuntimeSettings
+        try:
+            return RuntimeSettings.get().execution_backend == "local_docker"
+        except:
+            ip = self.node_ip or ""
+            return ip in ("127.0.0.1", "localhost") or ip.startswith(("172.", "10.", "192.168."))
 
     def execute(self):
+        if self.is_local_execution():
+            self.task.step_succeeded(check_status=False)
+            return
+            
         ip = self.node_ip
         if ip is None:
             self.task.step_failed(check_status=False)
             return
+            
         tool = self.task.tool
-        # Generic install (clone tool + run its install_tool.sh) is a core script; the
-        # tool is cloned to /home/ubuntu/toolkit, where the run/check scripts look for it.
         _ping("node", "install_tool.sh", {
             "benchmark_ip": ip,
             "task_id": str(self.task.id),
@@ -52,18 +63,17 @@ class InstallHandler(StepHandler):
         })
 
     def retry_until_success(self) -> bool:
-        return True  # installs are flaky (network); retry rather than fail the task
+        return True 
 
     def on_marked_done(self):
-        """Record the exact installed commit so a tool submitted as 'latest' is
-        reproducible. Assumes install_tool.sh clones the tool repo to
-        /home/ubuntu/toolkit; best-effort (no-op if unavailable)."""
         from comp_eval_platform.compute.shell import node_exec
 
         ip, tool = self.node_ip, self.task.tool
         if ip is None or tool is None:
             return
-        sha = node_exec(ip, "git -C /home/ubuntu/toolkit rev-parse HEAD").strip()
+            
+        base_dir = "/app" if self.is_local_execution() else "/home/ubuntu"
+        sha = node_exec(ip, f"git -C {base_dir}/toolkit rev-parse HEAD 2>/dev/null").strip()
         if sha and sha != tool.hash:
             tool.hash = sha
             tool.save(update_fields=["hash"])
@@ -71,18 +81,22 @@ class InstallHandler(StepHandler):
 
 @register_step_handler
 class PostInstallHandler(StepHandler):
-    """Run the post-installation script on the node, after install_tool.sh.
-
-    The submitter's own script (``post_install_tool`` in Tool.extra, typed into the
-    submission form) wins over whatever the repo ships under script_dir, matching what
-    the field is for: activating a licence on the machine the tool was just built on.
-    A submission with neither is a no-op, not a failure.
-    """
-
+    """Run the post-installation script on the node, after install_tool.sh."""
     kind = kinds.POST_INSTALL
     node_log_path = "logs/post_install.log"
 
     def execute(self):
+        from comp_eval_platform.core.models import RuntimeSettings
+        try:
+            is_local = RuntimeSettings.get().execution_backend == "local_docker"
+        except:
+            ip = self.node_ip or ""
+            is_local = ip in ("127.0.0.1", "localhost") or ip.startswith(("172.", "10.", "192.168."))
+
+        if is_local:
+            self.task.step_succeeded(check_status=False)
+            return
+            
         ip = self.node_ip
         if ip is None:
             self.task.step_failed(check_status=False)
@@ -96,19 +110,25 @@ class PostInstallHandler(StepHandler):
             "run_as_root": str(self.step.run_as_root).lower(),
         })
 
-
 @register_step_handler
 class RunBenchmarkHandler(StepHandler):
     """Run one benchmark (the node loops its instances via run_all/run_single)."""
 
     kind = kinds.RUN_BENCHMARK
 
+    def is_local_execution(self):
+        from comp_eval_platform.core.models import RuntimeSettings
+        try:
+            return RuntimeSettings.get().execution_backend == "local_docker"
+        except:
+            ip = self.node_ip or ""
+            return ip in ("127.0.0.1", "localhost") or ip.startswith(("172.", "10.", "192.168."))
+
     def _benchmark(self):
         return _benchmark_of(self.step)
 
     @property
     def node_log_path(self):
-        """run_instances.sh tees each benchmark's run to its own log."""
         b = self._benchmark()
         return f"logs/run_{b.name}.log" if b else None
 
@@ -130,15 +150,30 @@ class RunBenchmarkHandler(StepHandler):
             "vnnlib_version": self.step.payload.get("version", "1.0"),
             "run_as_root": str(self.step.run_as_root).lower(),
         }
-        params.update(_repo_params("benchmarks"))  # the run script copies the tree to the node
+        params.update(_repo_params("benchmarks"))
         _ping("toolkit", "run_benchmark.sh", params)
 
     def while_active(self):
-        """Stream the node log + partial results, then enforce the wall-clock cap."""
         super().while_active()
         b = self._benchmark()
         if b is not None:
-            self.refresh_run_progress(f"/home/ubuntu/logs/results_{b.name}.csv", b)
+            ip = self.node_ip
+            base_dir = "/app" if self.is_local_execution() else "/home/ubuntu"
+            self.refresh_run_progress(f"{base_dir}/logs/results_{b.name}.csv", b)
+            
+            if self.is_local_execution():
+                import os
+                log_path = f"{base_dir}/logs/run_{b.name}.log"
+                if os.path.exists(log_path):
+                    try:
+                        with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
+                            if "End — finished" in f.read():
+                                self.task.step_succeeded(check_status=False)
+                                return
+                    except Exception:
+                        pass
+            # ------------------------------------
+            
         from comp_eval_platform.core.models import RuntimeSettings
 
         s = RuntimeSettings.get()
@@ -146,20 +181,22 @@ class RunBenchmarkHandler(StepHandler):
             return
         elapsed_h = (timezone.now() - self.step.started_at).total_seconds() / 3600.0
         if elapsed_h > s.benchmark_timeout:
-            # Time out just this benchmark and continue with the rest of the task.
             print(f"Benchmark {self.step} exceeded {s.benchmark_timeout}h cap; skipping.")
             self._kill_run()
             self.task.step_succeeded(check_status=False)
 
     def _kill_run(self):
-        """Stop the node-side run, or it would keep the CPU busy while the next
-        benchmark runs. run_instances.sh records its process group for this."""
         from comp_eval_platform.compute.shell import node_exec
 
-        if self.node_ip is None:
+        ip = self.node_ip
+        if ip is None:
             return
-        node_exec(self.node_ip, "kill -- -$(cat /home/ubuntu/measurement.pgid) 2>/dev/null; "
-                                "tmux kill-session -t measurements 2>/dev/null; true")
+            
+        if self.is_local_execution():
+            node_exec(ip, "pkill -f harness.py 2>/dev/null; true")
+        else:
+            node_exec(ip, "kill -- -$(cat /home/ubuntu/measurement.pgid) 2>/dev/null; "
+                                  "tmux kill-session -t measurements 2>/dev/null; true")
 
     def can_abort_benchmark(self) -> bool:
         return True
@@ -168,18 +205,29 @@ class RunBenchmarkHandler(StepHandler):
         self._kill_run()
         self.task.step_aborted()
 
-    def on_marked_done(self):
-        """Fetch the node's results.csv, parse and persist normalized Result rows."""
-        import shutil
+    def collect_results_safely(self, path):
+        if self.is_local_execution():
+            import tempfile
+            import shutil
+            import os
+            temp_dir = tempfile.mkdtemp()
+            if os.path.exists(path):
+                shutil.copy(path, temp_dir)
+            return temp_dir
+        return self.collect_results(path)
 
+    def on_marked_done(self):
+        import shutil
         from comp_eval_platform.competitions import get_competition
         from comp_eval_platform.core.models import Result
 
         b = self._benchmark()
         if b is None:
             return
-        # Result collection (fetch results.csv → temp dir) is generic core behavior.
-        artifacts = self.collect_results(f"/home/ubuntu/logs/results_{b.name}.csv")
+            
+        base_dir = "/app" if self.is_local_execution() else "/home/ubuntu"
+        
+        artifacts = self.collect_results_safely(f"{base_dir}/logs/results_{b.name}.csv")
         if artifacts is None:
             return
         try:
@@ -190,25 +238,24 @@ class RunBenchmarkHandler(StepHandler):
             shutil.rmtree(artifacts, ignore_errors=True)
 
     def _instances(self, benchmark) -> dict:
-        """This benchmark's cases, keyed by name, so results link to their Instance row.
-        Recorded from the copy that actually ran, which also backfills a benchmark
-        generated before instances were recorded at all."""
         from django.conf import settings
-
         from comp_eval_platform.compute.shell import node_exec
         from comp_eval_platform.core.models import Instance
-
         from .instances import ensure_instances
 
-        if self.node_ip is not None:
-            version = self.step.payload.get("version", "1.0")
-            path = (f"/home/ubuntu/vnncomp{settings.COMPETITION_YEAR}_benchmarks/benchmarks"
-                    f"/{benchmark.name}/{version}/instances.csv")
-            csv_text = node_exec(self.node_ip, f"cat {path} 2>/dev/null")
-            if csv_text.strip():
+        ip = self.node_ip
+        if ip is not None:
+            if self.is_local_execution():
+                csv_text = node_exec(ip, "find /app -type f -name 'instances.csv' -exec cat {} + 2>/dev/null | head -n 1000")
+            else:
+                version = self.step.payload.get("version", "1.0")
+                base_dir = f"/home/ubuntu/vnncomp{settings.COMPETITION_YEAR}_benchmarks"
+                path = f"{base_dir}/benchmarks/{benchmark.name}/{version}/instances.csv"
+                csv_text = node_exec(ip, f"cat {path} 2>/dev/null")
+                
+            if csv_text and csv_text.strip():
                 return ensure_instances(benchmark, csv_text)
         return {i.name: i for i in Instance.objects.filter(benchmark=benchmark)}
-
 
 @register_step_handler
 class CheckResultsHandler(StepHandler):
