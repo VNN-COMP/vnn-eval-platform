@@ -7,7 +7,7 @@
 # still bind-mounted and pip-installed at runtime (see docker-compose.yml).
 FROM python:3.11-slim
 
-ARG DOCKER_CLI_VERSION=24.0.9
+ARG DOCKER_CLI_VERSION=29.0.1
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
