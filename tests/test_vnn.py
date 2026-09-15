@@ -16,6 +16,28 @@ def test_active_competition_is_vnn():
     from comp_eval_platform.competitions import get_competition
 
     assert get_competition().name == "vnn"
+    assert get_competition().benchmark_groups() == ("test", "regular", "extended")
+
+
+def test_build_steps_follow_group_order_and_snapshot_group():
+    from comp_eval_platform.competitions import get_competition
+    from comp_eval_platform.core.models import Benchmark, Category, Task, Tool
+
+    from vnn_comp import kinds
+
+    cat = Category.objects.create(name="default")
+    tool = Tool.objects.create(owner=_user(), category=cat, name="t", repository="r")
+    Benchmark.objects.create(owner=_user(), category=cat, name="Extended", group="extended", published=True)
+    Benchmark.objects.create(owner=_user(), category=cat, name="Regular", group="regular", published=True)
+    Benchmark.objects.create(owner=_user(), category=cat, name="Smoke", group="test", published=True)
+
+    task = Task.objects.create(owner=tool.owner, tool=tool)
+    get_competition().build_steps(task)
+    runs = task.step_set.filter(kind=kinds.RUN_BENCHMARK).order_by("order")
+
+    assert [(step.payload["benchmark_name"], step.payload["benchmark_group"]) for step in runs] == [
+        ("Smoke", "test"), ("Regular", "regular"), ("Extended", "extended"),
+    ]
 
 
 def test_validate_tool_requires_repository():
@@ -400,17 +422,24 @@ def test_score_builds_scoreboard():
     cat = Category.objects.create(name="default")
     u = _user()
     tool = Tool.objects.create(owner=u, category=cat, name="alpha", repository="r")
-    bench = Benchmark.objects.create(owner=u, category=cat, name="b1", published=True)
+    bench = Benchmark.objects.create(owner=u, category=cat, name="b1", group="regular", published=True)
+    extended = Benchmark.objects.create(
+        owner=u, category=cat, name="b2", group="extended", published=True,
+    )
     task = Task.objects.create(owner=u, tool=tool)
     Result.objects.create(task=task, tool=tool, benchmark=bench, category=cat, result="sat", time=1.0)
     Result.objects.create(task=task, tool=tool, benchmark=bench, category=cat, result="unknown", time=2.0)
+    Result.objects.create(task=task, tool=tool, benchmark=extended, category=cat, result="sat", time=9.0)
 
     track = Track.objects.create(name="main")
-    track.benchmarks.add(bench)
+    track.benchmarks.add(bench, extended)
 
     board = get_competition().score(track)
     assert board.columns == ["tool", "solved", "time"]
-    assert board.rows == [{"tool": "alpha", "solved": 1, "time": 3.0}]
+    assert board.rows == [{"tool": "alpha", "solved": 2, "time": 12.0}]
+    assert get_competition().score_group(track, "regular").rows == [
+        {"tool": "alpha", "solved": 1, "time": 3.0},
+    ]
 
 
 def test_parse_overall_summary_reads_the_scorers_report():
