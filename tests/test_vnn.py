@@ -16,7 +16,7 @@ def test_active_competition_is_vnn():
     from comp_eval_platform.competitions import get_competition
 
     assert get_competition().name == "vnn"
-    assert get_competition().benchmark_groups() == ("test", "regular", "extended")
+    assert get_competition().benchmark_groups() == ("default", "regular", "extended")
 
 
 def test_build_steps_follow_group_order_and_snapshot_group():
@@ -29,14 +29,14 @@ def test_build_steps_follow_group_order_and_snapshot_group():
     tool = Tool.objects.create(owner=_user(), category=cat, name="t", repository="r")
     Benchmark.objects.create(owner=_user(), category=cat, name="Extended", group="extended", published=True)
     Benchmark.objects.create(owner=_user(), category=cat, name="Regular", group="regular", published=True)
-    Benchmark.objects.create(owner=_user(), category=cat, name="Smoke", group="test", published=True)
+    Benchmark.objects.create(owner=_user(), category=cat, name="Unassigned", published=True)
 
     task = Task.objects.create(owner=tool.owner, tool=tool)
     get_competition().build_steps(task)
     runs = task.step_set.filter(kind=kinds.RUN_BENCHMARK).order_by("order")
 
     assert [(step.payload["benchmark_name"], step.payload["benchmark_group"]) for step in runs] == [
-        ("Smoke", "test"), ("Regular", "regular"), ("Extended", "extended"),
+        ("Unassigned", "default"), ("Regular", "regular"), ("Extended", "extended"),
     ]
 
 

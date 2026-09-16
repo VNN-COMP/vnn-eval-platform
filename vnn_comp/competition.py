@@ -24,7 +24,7 @@ class VNNCompetition(Competition):
     uses_categories = False  # a single implicit 'default' category
 
     def benchmark_groups(self) -> tuple[str, ...]:
-        return ("test", "regular", "extended")
+        return ("default", "regular", "extended")
 
     # (1) Submission spec + validation ------------------------------------
     def validate_submission(self, submission) -> None:
