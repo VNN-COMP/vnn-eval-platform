@@ -72,7 +72,7 @@ services:
         condition: service_healthy
 
   frontend:
-    image: node:20-slim
+    image: node:24-slim
     working_dir: /app
     volumes:
       - ./core/frontend:/app
