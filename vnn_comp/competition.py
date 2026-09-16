@@ -23,6 +23,9 @@ class VNNCompetition(Competition):
     display_name = "VNN-COMP"
     uses_categories = False  # a single implicit 'default' category
 
+    def benchmark_groups(self) -> tuple[str, ...]:
+        return ("default", "regular", "extended")
+
     # (1) Submission spec + validation ------------------------------------
     def validate_submission(self, submission) -> None:
         from comp_eval_platform.core.models import Tool
@@ -83,11 +86,13 @@ class VNNCompetition(Competition):
             # (from the form), run exactly those; otherwise the whole category.
             selected = opts.get("benchmarks") or []
             if selected:
-                benchmarks = Benchmark.objects.filter(id__in=selected, published=True).order_by("name")
+                benchmarks = Benchmark.objects.filter(id__in=selected, published=True)
             else:
-                benchmarks = Benchmark.objects.filter(category=tool.category, published=True).order_by("name")
+                benchmarks = Benchmark.objects.filter(category=tool.category, published=True)
+            benchmarks = self.order_benchmarks(benchmarks)
             for b in benchmarks:
                 steps.append(add(kinds.RUN_BENCHMARK, benchmark_id=str(b.id),
+                                 benchmark_name=b.name, benchmark_group=b.group,
                                  run_networks=run_networks, version=version,
                                  run_as_root=as_root("run_toolkit_as_root")))
                 # Validate the run's witnesses before exporting them, so what is
@@ -153,11 +158,21 @@ class VNNCompetition(Competition):
 
     # (5) Scoring ---------------------------------------------------------
     def score(self, track) -> Scoreboard:
+        return self._score(track)
+
+    def score_group(self, track, group: str) -> Scoreboard:
+        self.validate_benchmark_group(group)
+        return self._score(track, group=group)
+
+    def _score(self, track, *, group=None) -> Scoreboard:
         from collections import defaultdict
 
         from comp_eval_platform.core.models import Result
 
-        benchmark_ids = track.benchmarks.values_list("id", flat=True)
+        benchmarks = track.benchmarks.all()
+        if group is not None:
+            benchmarks = benchmarks.filter(group=group)
+        benchmark_ids = benchmarks.values_list("id", flat=True)
         rows = defaultdict(lambda: {"solved": 0, "time": 0.0})
         for r in Result.objects.filter(benchmark_id__in=benchmark_ids).select_related("tool"):
             key = r.tool.name
